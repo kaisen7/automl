@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
@@ -413,9 +413,10 @@ export default function Upload() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    axios.get(`${API}/datasets`)
-      .then(res => setDatasets(res.data.datasets))
-      .catch(err => console.error(err));
+    axios
+      .get(`${API}/datasets`)
+      .then((res) => setDatasets(res.data.datasets))
+      .catch((err) => console.error(err));
   }, []);
 
   const handleDatasetChange = (e) => {
@@ -430,21 +431,26 @@ export default function Upload() {
       setSelectedDataset("");
     }
   };
-
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
     if (!target.trim()) return setError("Please enter a target column.");
-    if (!selectedDataset && !file) return setError("Please upload a file or select a sample dataset.");
-    if (file && !file.name.endsWith(".csv")) return setError("Please upload a CSV file.");
+    if (!selectedDataset && !file)
+      return setError("Please upload a file or select a sample dataset.");
+    if (file && !file.name.endsWith(".csv"))
+      return setError("Please upload a CSV file.");
 
     setLoading(true);
     try {
       let columns;
 
       if (selectedDataset) {
-        const res = await axios.post(`${API}/load_dataset`, new URLSearchParams({ name: selectedDataset }));
+        const res = await axios.post(
+          `${API}/load_dataset`,
+          new URLSearchParams({ name: selectedDataset }),
+        );
         columns = res.data.columns;
       } else {
         const formData = new FormData();
@@ -453,14 +459,26 @@ export default function Upload() {
         columns = res.data.columns;
       }
 
-      const trainRes = await axios.post(`${API}/train?target=${encodeURIComponent(target)}`);
+      const trainRes = await axios.post(
+        `${API}/train?target=${encodeURIComponent(target)}`,
+      );
 
+      const scores = trainRes.data.scores;
+
+      //  SAVE DATA 
+      localStorage.setItem("automl_results", JSON.stringify(scores));
+      localStorage.setItem("automl_columns", JSON.stringify(columns));
+      localStorage.setItem("automl_target", target);
+
+      //  navigate
       navigate("/results", {
-        state: { results: trainRes.data.scores, columns, target },
+        state: { results: scores, columns, target },
       });
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.detail || "Something went wrong. Please try again.");
+      setError(
+        err.response?.data?.detail || "Something went wrong. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -475,12 +493,13 @@ export default function Upload() {
 
           <div className="card-header">
             <div className="card-eyebrow">AutoML · Dataset Ingestion</div>
-            <h1 className="card-title">Train a <span>Model</span></h1>
+            <h1 className="card-title">
+              Train a <span>Model</span>
+            </h1>
           </div>
 
           <form onSubmit={handleSubmit}>
             <div className="card-body">
-
               {error && (
                 <div className="error-box">
                   <i className="error-icon">!</i>
@@ -493,34 +512,62 @@ export default function Upload() {
                 <div className="field-label">Upload CSV</div>
                 <div
                   className={`drop-zone${dragOver ? " drag-over" : ""}${file ? " has-file" : ""}`}
-                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                  }}
                   onDragLeave={() => setDragOver(false)}
                   onDrop={(e) => {
                     e.preventDefault();
                     setDragOver(false);
                     const f = e.dataTransfer.files[0];
-                    if (f) { setFile(f); setSelectedDataset(""); }
+                    if (f) {
+                      setFile(f);
+                      setSelectedDataset("");
+                    }
                   }}
                 >
-                  <input type="file" accept=".csv" onChange={handleFileChange} />
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileChange}
+                  />
                   <div className="drop-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                      <polyline points="17 8 12 3 7 8"/>
-                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
                     </svg>
                   </div>
                   {file ? (
                     <div className="file-chip">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <polyline points="20 6 9 17 4 12"/>
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
                       </svg>
                       {file.name}
                     </div>
                   ) : (
                     <>
-                      <div className="drop-primary">Drop file or click to browse</div>
-                      <div className="drop-secondary">Accepts .csv — max 50 MB</div>
+                      <div className="drop-primary">
+                        Drop file or click to browse
+                      </div>
+                      <div className="drop-secondary">
+                        Accepts .csv — max 50 MB
+                      </div>
                     </>
                   )}
                 </div>
@@ -537,8 +584,10 @@ export default function Upload() {
                   value={selectedDataset}
                 >
                   <option value="">Choose a built-in dataset…</option>
-                  {datasets.map(ds => (
-                    <option key={ds} value={ds}>{ds}</option>
+                  {datasets.map((ds) => (
+                    <option key={ds} value={ds}>
+                      {ds}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -567,7 +616,6 @@ export default function Upload() {
                   {loading ? "Training model…" : "Upload & Train"}
                 </div>
               </button>
-
             </div>
           </form>
 

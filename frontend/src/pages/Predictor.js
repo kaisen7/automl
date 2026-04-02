@@ -422,8 +422,8 @@ const styles = `
 `;
 
 export default function Predictor() {
-  const rawColumns = localStorage.getItem("columns");
-  const target = localStorage.getItem("target");
+  const rawColumns = localStorage.getItem("automl_columns");
+  const target = localStorage.getItem("automl_target");
 
   const [input, setInput] = useState({});
   const [prediction, setPrediction] = useState(null);
@@ -439,15 +439,27 @@ export default function Predictor() {
           <div className="pred-wrap">
             <div className="guard-card">
               <div className="guard-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="12"/>
-                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
               </div>
               <div className="guard-title">No session data found</div>
-              <div className="guard-sub">Train a model first before running predictions.</div>
-              <button className="ghost-btn" onClick={() => window.location.href = "/upload"}>
+              <div className="guard-sub">
+                Train a model first before running predictions.
+              </div>
+              <button
+                className="ghost-btn"
+                onClick={() => (window.location.href = "/")}
+              >
                 Go to Upload
               </button>
             </div>
@@ -458,17 +470,21 @@ export default function Predictor() {
   }
 
   const columns = JSON.parse(rawColumns);
-  const inputCols = columns.filter(col => col !== target);
+  const inputCols = columns.filter((col) => col !== target);
 
   const handleChange = (col, value) => {
-    setInput(prev => ({ ...prev, [col]: value === "" ? "" : Number(value) }));
+    setInput((prev) => ({ ...prev, [col]: value === "" ? "" : Number(value) }));
   };
 
   const handlePredict = async () => {
     setError("");
-    const missing = inputCols.filter(col => input[col] === undefined || input[col] === "");
+    const missing = inputCols.filter(
+      (col) => input[col] === undefined || input[col] === "",
+    );
     if (missing.length > 0) {
-      setError(`Fill in all fields before predicting. Missing: ${missing.join(", ")}`);
+      setError(
+        `Fill in all fields before predicting. Missing: ${missing.join(", ")}`,
+      );
       return;
     }
 
@@ -478,7 +494,9 @@ export default function Predictor() {
       setPrediction(res.data.prediction);
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.detail || "Prediction failed. Please try again.");
+      setError(
+        err.response?.data?.detail || "Prediction failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -489,11 +507,12 @@ export default function Predictor() {
       <style>{styles}</style>
       <div className="pred-root">
         <div className="pred-wrap">
-
           {/* Header */}
           <div className="page-header">
             <div className="page-eyebrow">AutoML · Inference</div>
-            <h1 className="page-title">Run a <span>Prediction</span></h1>
+            <h1 className="page-title">
+              Run a <span>Prediction</span>
+            </h1>
           </div>
 
           {/* Target badge */}
@@ -508,15 +527,21 @@ export default function Predictor() {
           <div className="pred-card">
             <div className="card-bar" />
             <div className="card-body">
-
               <div className="section-label">Feature Inputs</div>
 
               {error && (
                 <div className="error-box">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
                   </svg>
                   {error}
                 </div>
@@ -548,7 +573,6 @@ export default function Predictor() {
                 {loading && <div className="spinner" />}
                 {loading ? "Running inference…" : "Predict"}
               </button>
-
             </div>
           </div>
 
@@ -559,8 +583,15 @@ export default function Predictor() {
               <div className="result-body">
                 <div className="result-left">
                   <div className="result-icon">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    <svg
+                      width="22"
+                      height="22"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    >
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
                   </div>
                   <div className="result-meta">
@@ -574,7 +605,6 @@ export default function Predictor() {
               </div>
             </div>
           )}
-
         </div>
       </div>
     </Layout>

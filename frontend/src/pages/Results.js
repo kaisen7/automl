@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
+import API from "../api";
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap');
@@ -412,115 +413,155 @@ const styles = `
 export default function Results() {
   const location = useLocation();
   const navigate = useNavigate();
-  const results = location.state?.results || {};
-  const sorted = Object.entries(results).sort((a, b) => b[1] - a[1]);
+
+  const storedResults = localStorage.getItem("automl_results");
+
+  const results =
+    location.state?.results || (storedResults ? JSON.parse(storedResults) : {});
+
+  //  Filter only valid models (ignore errors)
+  const getScore = (v) => v.cv_mean ?? v.cv_mean_r2;
+
+  const validResults = Object.entries(results).filter(
+    ([_, v]) => v && getScore(v) !== undefined,
+  );
+
+  //  Sort by CV score
+  const sorted = validResults.sort((a, b) => getScore(b[1]) - getScore(a[1]));
+
+  
   const best = sorted[0];
 
-  // Stagger delay per row
-  const rowDelay = (i) => `${0.15 + i * 0.07}s`;
+  const maxScore = best ? getScore(best[1]) : 1;
 
-  // Score relative to best for bar width
-  const maxScore = best ? best[1] : 1;
   const relWidth = (score) => Math.max(0, Math.min(1, score / maxScore));
 
   return (
     <Layout>
       <style>{styles}</style>
-      <div className="results-root">
-        <div className="results-wrap">
+      <div style={{ padding: "40px", color: "white" }}>
+        <h1>🏆 Model Rankings</h1>
 
-          {/* Header */}
-          <div className="page-header">
-            <div className="page-eyebrow">AutoML · Evaluation Complete</div>
-            <h1 className="page-title">Model <span>Rankings</span></h1>
-          </div>
-
-          {sorted.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="12"/>
-                  <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-              </div>
-              <div className="empty-title">No results found</div>
-              <div className="empty-sub">Train a model first to see scores here.</div>
+        {sorted.length === 0 ? (
+          <p>No valid models found. Try another dataset.</p>
+        ) : (
+          <>
+            {/*  BEST MODEL */}
+            <div
+              style={{
+                marginTop: "20px",
+                padding: "20px",
+                border: "1px solid #444",
+                borderRadius: "8px",
+              }}
+            >
+              <h2>Best Model: {best[0]}</h2>
+              <p>CV Score: {getScore(best[1]).toFixed(4)}</p>
             </div>
-          ) : (
-            <>
-              {/* Best model hero */}
-              <div className="hero-card">
-                <div className="hero-bar" />
-                <div className="hero-body">
-                  <div className="hero-left">
-                    <div className="trophy-box">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M6 9H3V4h3M18 9h3V4h-3M6 4h12v7a6 6 0 0 1-12 0V4z"/>
-                        <path d="M12 17v4M8 21h8"/>
-                      </svg>
-                    </div>
-                    <div className="hero-meta">
-                      <div className="hero-tag">Best Model</div>
-                      <div className="hero-name">{best[0]}</div>
-                    </div>
-                  </div>
-                  <div className="hero-score-block">
-                    <div className="hero-score-label">Score</div>
-                    <div className="hero-score-value">{best[1].toFixed(4)}</div>
-                  </div>
-                </div>
-              </div>
 
-              {/* All models */}
-              <div className="section-label">All Models</div>
+            {/*  ALL MODELS */}
+            <div style={{ marginTop: "30px" }}>
+              {sorted.map(([model, data], i) => {
+                const score = getScore(data);
 
-              <div className="model-list">
-                {sorted.map(([model, score], i) => (
+                return (
                   <div
                     key={model}
-                    className={`model-row${i === 0 ? " rank-1" : ""}`}
-                    style={{ animationDelay: rowDelay(i) }}
+                    style={{
+                      marginBottom: "15px",
+                      padding: "12px",
+                      border: "1px solid #333",
+                      borderRadius: "6px",
+                    }}
                   >
-                    <div className="rank-num">#{i + 1}</div>
-                    <div className="model-name">{model}</div>
-                    <div className="score-bar-wrap">
-                      <div className="score-bar-track">
-                        <div
-                          className="score-bar-fill"
-                          style={{
-                            width: `${relWidth(score) * 100}%`,
-                            animationDelay: rowDelay(i),
-                          }}
-                        />
-                      </div>
-                      <div className="score-val">{score.toFixed(4)}</div>
+                    <strong>
+                      #{i + 1} {model}
+                    </strong>
+
+                    <div
+                      style={{
+                        height: "6px",
+                        background: "#222",
+                        marginTop: "6px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${relWidth(score) * 100}%`,
+                          height: "100%",
+                          background: i === 0 ? "gold" : "#4ade80",
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ marginTop: "5px", fontSize: "12px" }}>
+                      CV: {score.toFixed(4)}
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
+            </div>
 
-              {/* CTAs */}
-              <div className="cta-row">
-                <button className="btn-primary" onClick={() => navigate("/eda")}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-                    <polyline points="17 6 23 6 23 12"/>
-                  </svg>
-                  Explore EDA
-                </button>
-                <button className="btn-ghost" onClick={() => navigate("/")}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                  New Dataset
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+            {/* CTAs */}
+            <div className="cta-row">
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  const stored = localStorage.getItem("automl_results");
+                  if (!stored) {
+                    navigate("/");
+                  } else {
+                    navigate("/eda");
+                  }
+                }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                >
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                  <polyline points="17 6 23 6 23 12" />
+                </svg>
+                Explore EDA
+              </button>
+              <button
+                className="btn-ghost"
+                onClick={async () => {
+                  // clear ALL frontend state FIRST
+                  localStorage.clear(); 
+
+                  //  reset backend
+                  try {
+                    await fetch(`${API}/reset`, { method: "POST" });
+                  } catch (e) {
+                    console.error("Reset failed", e);
+                  }
+
+                  //  force navigation AFTER clearing
+                  navigate("/", { replace: true });
+                }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                New Dataset
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </Layout>
   );
