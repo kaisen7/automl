@@ -418,6 +418,20 @@ export default function Upload() {
       .then((res) => setDatasets(res.data.datasets))
       .catch((err) => console.error(err));
   }, []);
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (loading) {
+        e.preventDefault();
+        e.returnValue = ""; // required for browser warning
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [loading]);
 
   const handleDatasetChange = (e) => {
     setSelectedDataset(e.target.value);
@@ -431,7 +445,7 @@ export default function Upload() {
       setSelectedDataset("");
     }
   };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -443,6 +457,7 @@ export default function Upload() {
       return setError("Please upload a CSV file.");
 
     setLoading(true);
+
     try {
       let columns;
 
@@ -465,7 +480,7 @@ export default function Upload() {
 
       const scores = trainRes.data.scores;
 
-      //  SAVE DATA 
+      //  SAVE DATA
       localStorage.setItem("automl_results", JSON.stringify(scores));
       localStorage.setItem("automl_columns", JSON.stringify(columns));
       localStorage.setItem("automl_target", target);
@@ -475,7 +490,6 @@ export default function Upload() {
         state: { results: scores, columns, target },
       });
     } catch (err) {
-      localStorage.clear()
       console.error(err);
       setError(
         err.response?.data?.detail || "Something went wrong. Please try again.",

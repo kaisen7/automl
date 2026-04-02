@@ -45,12 +45,29 @@ def train_model(df, target):
             X[col] = X[col].fillna(X[col].median())
 
     # --- One-hot encode ---
-    X = pd.get_dummies(X)
+    X = pd.get_dummies(X, drop_first=True)
     columns = list(X.columns)
+    
+    # --- Remove problematic values ---
+    X = X.replace([np.inf, -np.inf], np.nan)
+
+    # Drop rows with NaN
+    valid_idx = X.dropna().index
+    X = X.loc[valid_idx]
+    y = y.loc[valid_idx]
+
+    # Remove constant columns
+    X = X.loc[:, X.nunique() > 1]
+    
+    stratify = None
+    if problem_type == "classification" and y.value_counts().min() >= 2:
+        stratify = y
+
+    
 
     # --- Train / test split ---
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y if problem_type == "classification" else None
+        X, y, test_size=0.2, random_state=42, stratify=stratify
     )
 
     # --- Define candidate models (pipelines with optional scaling) ---
@@ -93,10 +110,19 @@ def train_model(df, target):
             cv = min(5, len(y_train))
             if problem_type == "classification":
                 cv = min(cv, y_train.value_counts().min())
-            cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring=cv_scoring, n_jobs=-1)
-            cv_mean = float(np.mean(cv_scores))
-            cv_std = float(np.std(cv_scores))
+            cv_scores = cross_val_score(model, X_train, y_train, cv=cv, scoring=cv_scoring, n_jobs=1,error_score=np.nan)
+            
+            valid_scores = cv_scores[~np.isnan(cv_scores)]
 
+            if len(valid_scores) == 0:
+                raise ValueError("All CV folds failed")
+
+            cv_mean = float(np.mean(valid_scores))
+            cv_std = float(np.std(valid_scores))
+            
+            if len(valid_scores) < len(cv_scores):
+                print(f"⚠️ {name}: {len(cv_scores)-len(valid_scores)} folds failed, using remaining {len(valid_scores)}")
+                
             # Final fit on full train set
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
@@ -127,7 +153,11 @@ def train_model(df, target):
                 best_model = model
 
         except Exception as e:
-            scores[name] = {"error": str(e)}
+            print(f"{name} failed:", e)
+
+            scores[name] = {
+                "error": str(e)
+            }
 
     if best_model is None:
         raise RuntimeError("All models failed to train.")
