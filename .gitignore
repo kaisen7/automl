@@ -1,0 +1,17 @@
+Auto-ML/
+.env
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv
+node_modules/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
