@@ -50,6 +50,59 @@ def _safe_read_csv(path: str) -> pd.DataFrame:
         raise HTTPException(status_code=422, detail=f"Could not parse CSV: {e}")
 
 
+def _compute_outliers(df: pd.DataFrame, numeric_cols: list) -> dict:
+    """IQR-based outlier count per numeric column."""
+    outliers = {}
+    for col in numeric_cols:
+        series = df[col].dropna()
+        if series.empty:
+            outliers[col] = 0
+            continue
+        Q1 = series.quantile(0.25)
+        Q3 = series.quantile(0.75)
+        IQR = Q3 - Q1
+        count = int(((series < Q1 - 1.5 * IQR) | (series > Q3 + 1.5 * IQR)).sum())
+        outliers[col] = count
+    return outliers
+
+
+def _compute_scatter_data(df: pd.DataFrame, corr: dict, numeric_cols: list, n_pairs: int = 6, sample_size: int = 200) -> dict:
+    """
+    Return up to n_pairs top-correlated (col_a, col_b) scatter point arrays.
+    Keys are formatted as "colA__colB".
+    """
+    # Collect unique pairs sorted by abs correlation descending
+    pairs = []
+    seen = set()
+    cols = list(numeric_cols)
+    for i in range(len(cols)):
+        for j in range(i + 1, len(cols)):
+            col_a, col_b = cols[i], cols[j]
+            key = f"{col_a}__{col_b}"
+            if key in seen:
+                continue
+            seen.add(key)
+            val = corr.get(col_a, {}).get(col_b, None)
+            if val is not None and not np.isnan(val):
+                pairs.append((col_a, col_b, abs(val)))
+
+    pairs.sort(key=lambda x: x[2], reverse=True)
+    top_pairs = pairs[:n_pairs]
+
+    scatter_data = {}
+    for col_a, col_b, _ in top_pairs:
+        key = f"{col_a}__{col_b}"
+        subset = df[[col_a, col_b]].dropna()
+        if len(subset) > sample_size:
+            subset = subset.sample(sample_size, random_state=42)
+        scatter_data[key] = [
+            {"x": round(float(row[col_a]), 6), "y": round(float(row[col_b]), 6)}
+            for _, row in subset.iterrows()
+        ]
+
+    return scatter_data
+
+
 # ── Datasets ──────────────────────────────────────────────────────────────────
 @app.get("/datasets")
 async def get_datasets():
@@ -131,6 +184,7 @@ async def eda():
 
     df = global_df.copy()
     numeric_df = df.select_dtypes(include=["number"])
+    numeric_cols = list(numeric_df.columns)
 
     # Summary stats
     summary = df.describe(include="all").replace({np.nan: None}).to_dict()
@@ -140,7 +194,7 @@ async def eda():
 
     # Histograms
     histograms = {}
-    for col in numeric_df.columns:
+    for col in numeric_cols:
         counts, bins = np.histogram(df[col].dropna(), bins=10)
         histograms[col] = [
             {"bin": f"{round(bins[i], 2)}–{round(bins[i+1], 2)}", "count": int(counts[i])}
@@ -159,11 +213,19 @@ async def eda():
     importance = {}
     if global_model is not None:
         estimator = global_model
-        # Unwrap Pipeline
         if hasattr(global_model, "named_steps"):
             estimator = global_model.named_steps.get("clf") or global_model.named_steps.get("reg")
         if estimator is not None and hasattr(estimator, "feature_importances_"):
             importance = dict(zip(global_columns, estimator.feature_importances_.tolist()))
+
+    # ── NEW: Duplicate rows ───────────────────────────────────────────────────
+    duplicate_rows = int(df.duplicated().sum())
+
+    # ── NEW: Outlier detection (IQR method) ──────────────────────────────────
+    outliers = _compute_outliers(df, numeric_cols)
+
+    # ── NEW: Scatter data for top correlated pairs ────────────────────────────
+    scatter_data = _compute_scatter_data(df, corr, numeric_cols)
 
     meta = getattr(global_model, "_automl_meta", {}) if global_model else {}
 
@@ -178,10 +240,14 @@ async def eda():
         "importance": importance,
         "num_rows": len(df),
         "num_columns": len(df.columns),
-        "numeric_columns": meta.get("numeric_columns", list(numeric_df.columns)),
+        "numeric_columns": meta.get("numeric_columns", numeric_cols),
         "categorical_columns": meta.get("categorical_columns", list(df.select_dtypes("object").columns)),
         "missing_total": int(df.isnull().sum().sum()),
         "has_model": global_model is not None,
+        # ── New fields ────────────────────────────────────────────────────────
+        "duplicate_rows": duplicate_rows,
+        "outliers": outliers,
+        "scatter_data": scatter_data,
     }
 
 
@@ -215,6 +281,7 @@ async def predict(data: dict):
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
 
     return result
+
 
 @app.post("/reset")
 async def reset():
