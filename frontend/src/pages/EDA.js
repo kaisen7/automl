@@ -989,7 +989,7 @@ export default function EDA() {
 
           {/* ── Header ── */}
           <div className="page-header">
-            <div className="page-eyebrow">AutoML · Exploratory Analysis</div>
+            <div className="page-eyebrow">AutoML · Exploratory Data Analysis</div>
             <h1 className="page-title">
               EDA <span>Dashboard</span>
               {data.has_model && (
