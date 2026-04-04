@@ -18,10 +18,38 @@ def _detect_problem_type(y):
     return "regression"
 
 
-def train_model(df, target):
-    if target not in df.columns:
-        raise ValueError(f"Target column '{target}' not found in dataset.")
+def _infer_column_types(df: pd.DataFrame):
+    """Infer numeric vs categorical columns, including numeric-like object columns."""
+    numeric_cols = []
+    categorical_cols = []
 
+    for col in df.columns:
+        series = df[col]
+        if pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
+            numeric_cols.append(col)
+            continue
+
+        non_null = series.dropna().astype(str).str.strip()
+        if non_null.empty:
+            categorical_cols.append(col)
+            continue
+
+        coerced = pd.to_numeric(non_null, errors="coerce")
+        converted_ratio = coerced.notna().mean()
+        if converted_ratio >= 0.9 and coerced.notna().sum() >= 3:
+            numeric_cols.append(col)
+        else:
+            categorical_cols.append(col)
+
+    return numeric_cols, categorical_cols
+
+
+def train_model(df, target):
+    col_map = {col.lower(): col for col in df.columns}
+    target_lower = target.strip().lower()
+    if target_lower not in col_map:
+        raise ValueError(f"Target column '{target}' not found in dataset.")
+    target = col_map[target_lower]
     X = df.drop(columns=[target])
     y = df[target].copy()
 
@@ -33,16 +61,18 @@ def train_model(df, target):
         label_encoder = LabelEncoder()
         y = pd.Series(label_encoder.fit_transform(y), index=y.index)
 
-    # --- Track original column types before encoding ---
-    numeric_cols_orig = list(X.select_dtypes(include=["number"]).columns)
-    categorical_cols_orig = list(X.select_dtypes(include=["object"]).columns)
+    # --- Detect and normalize original column types before encoding ---
+    numeric_cols_orig, categorical_cols_orig = _infer_column_types(X)
+    numeric_fill_values = {}
 
-    # --- Fill missing values ---
     for col in X.columns:
-        if X[col].dtype == "object":
-            X[col] = X[col].fillna("missing")
+        if col in numeric_cols_orig:
+            X[col] = pd.to_numeric(X[col], errors="coerce")
+            fill_value = float(X[col].median()) if not X[col].dropna().empty else 0.0
+            X[col] = X[col].fillna(fill_value)
+            numeric_fill_values[col] = fill_value
         else:
-            X[col] = X[col].fillna(X[col].median())
+            X[col] = X[col].astype(str).fillna("missing")
 
     # --- One-hot encode ---
     X = pd.get_dummies(X, drop_first=True)
@@ -170,6 +200,7 @@ def train_model(df, target):
         "num_features": len(columns),
         "numeric_columns": numeric_cols_orig,
         "categorical_columns": categorical_cols_orig,
+        "numeric_fill_values": numeric_fill_values,
         "best_model_name": type(best_model.named_steps.get("clf") or best_model.named_steps.get("reg") if hasattr(best_model, "named_steps") else best_model).__name__,
         "best_cv_score": round(float(best_score), 4),
         "label_classes": label_encoder.classes_.tolist() if label_encoder else None,
@@ -178,20 +209,26 @@ def train_model(df, target):
     return best_model, scores, columns
 
 
-def predict_model(model, data, columns):
+def predict_model(model, data, columns, global_df):
     df = pd.DataFrame([data])
+    meta = getattr(model, "_automl_meta", {})
+    numeric_cols = set(meta.get("numeric_columns", []))
+    numeric_fill_values = meta.get("numeric_fill_values", {})
 
     for col in df.columns:
-        if df[col].dtype == "object":
-            df[col] = df[col].fillna("missing")
+        if col in numeric_cols:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+            df[col] = df[col].fillna(numeric_fill_values.get(col, 0.0))
         else:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            df[col] = df[col].fillna("missing").astype(str)
+            if col in global_df.columns:
+                valid_values = global_df[col].dropna().astype(str).unique()
+                df[col] = df[col].where(df[col].isin(valid_values), "missing")
 
     df = pd.get_dummies(df)
     df = df.reindex(columns=columns, fill_value=0)
 
     preds = model.predict(df)
-    meta = getattr(model, "_automl_meta", {})
 
     # Decode label if classifier used LabelEncoder
     label_classes = meta.get("label_classes")
