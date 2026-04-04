@@ -500,6 +500,51 @@ const styles = `
 
 const STAT_KEYS = ["count","mean","std","min","25%","50%","75%","max"];
 
+function normalizeFeatureName(feature, categoricalCols = []) {
+  if (!feature || !categoricalCols?.length) return feature;
+
+  const matchedCat = categoricalCols.find((col) =>
+    feature === col || feature.startsWith(`${col}_`) || feature.startsWith(`${col}__`) || feature.startsWith(`${col}-`)
+  );
+
+  return matchedCat || feature;
+}
+
+function truncateLabel(label, maxLength = 20) {
+  if (!label || label.length <= maxLength) return label;
+  return `${label.slice(0, maxLength - 1)}…`;
+}
+
+function buildPieChartData(values, maxSlices = 5) {
+  const entries = Object.entries(values).sort(([, a], [, b]) => b - a);
+  if (entries.length <= maxSlices) {
+    return entries.map(([name, value]) => ({ name, value }));
+  }
+
+  const topEntries = entries.slice(0, maxSlices - 1).map(([name, value]) => ({ name, value }));
+  const otherValue = entries.slice(maxSlices - 1).reduce((sum, [, value]) => sum + value, 0);
+  return [...topEntries, { name: "Other", value: otherValue }];
+}
+
+function PieLegend({ payload }) {
+  if (!payload || !payload.length) return null;
+  const ordered = [...payload].sort((a, b) => {
+    if (a.value === "Other") return 1;
+    if (b.value === "Other") return -1;
+    return 0;
+  });
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", fontFamily: "'DM Mono'", fontSize: 10, color: TEXT_DIM }}>
+      {ordered.map((entry) => (
+        <div key={entry.value} style={{ display: "inline-flex", alignItems: "center", gap: 6 }} title={entry.value}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: entry.color }} />
+          <span>{truncateLabel(entry.value, 18)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Model scores panel ─────────────────────────────────────────────────────────
 function ModelScores({ scores, bestModel }) {
   if (!scores || Object.keys(scores).length === 0) return null;
@@ -872,6 +917,25 @@ export default function EDA() {
     return cols;
   }, [data, colSearch, colTypeFilter]);
 
+  const categoricalCols = useMemo(() => data?.categorical_columns || [], [data?.categorical_columns]);
+
+  const featureImportance = useMemo(() => {
+    if (!data?.importance) return [];
+
+    const importanceMap = {};
+    Object.entries(data.importance).forEach(([feature, value]) => {
+      const normalized = normalizeFeatureName(feature, categoricalCols);
+      if (importanceMap[normalized] === undefined || value > importanceMap[normalized]) {
+        importanceMap[normalized] = value;
+      }
+    });
+
+    return Object.entries(importanceMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, value]) => ({ name, value }));
+  }, [data?.importance, categoricalCols]);
+
   if (!data && !error)
     return (
       <Layout>
@@ -914,7 +978,6 @@ export default function EDA() {
   const maxMissing = Math.max(...missingEntries.map(([, v]) => v), 1);
   const summaryColNames = Object.keys(data.summary || {});
   const numericCols = data.numeric_columns || [];
-  const categoricalCols = data.categorical_columns || [];
   const duplicateRows = data.duplicate_rows ?? 0;
   const totalOutliers = Object.values(data.outliers || {}).reduce((a, b) => a + b, 0);
 
@@ -1109,7 +1172,7 @@ export default function EDA() {
               <div className="section-label">Categorical Distribution</div>
               <div className="chart-grid">
                 {Object.entries(data.categorical).map(([col, values]) => {
-                  const chartData = Object.entries(values).map(([k, v]) => ({ name: k, value: v }));
+                  const chartData = buildPieChartData(values, 6);
                   return (
                     <div className="chart-card" key={col}>
                       <div className="chart-card-bar violet" />
@@ -1121,9 +1184,7 @@ export default function EDA() {
                               {chartData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="none" />)}
                             </Pie>
                             <Tooltip content={<ChartTooltip />} />
-                            <Legend iconType="circle" iconSize={7} formatter={(val) => (
-                              <span style={{ color: TEXT_DIM, fontFamily: "'DM Mono'", fontSize: 10 }}>{val}</span>
-                            )} />
+                            <Legend content={<PieLegend />} />
                           </PieChart>
                         </ResponsiveContainer>
                       </div>
@@ -1186,16 +1247,16 @@ export default function EDA() {
           />
 
           {/* ── Feature importance ── */}
-          {data.importance && Object.keys(data.importance).length > 0 && (
+          {featureImportance.length > 0 && (
             <div className="section" style={{ animationDelay: "0.25s" }}>
               <div className="section-label">Feature Importance</div>
               <div className="panel">
                 <div className="panel-bar violet" />
                 <div className="panel-body">
-                  <ResponsiveContainer width="100%" height={Math.max(200, Object.keys(data.importance).length * 28)}>
+                  <ResponsiveContainer width="100%" height={Math.max(200, featureImportance.length * 28)}>
                     <BarChart
                       layout="vertical"
-                      data={Object.entries(data.importance).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ name: k, value: v }))}
+                      data={featureImportance}
                       margin={{ top: 0, right: 20, bottom: 0, left: 20 }}
                     >
                       <CartesianGrid strokeDasharray="2 4" stroke={BORDER} horizontal={false} />

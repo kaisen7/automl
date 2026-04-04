@@ -407,6 +407,7 @@ export default function Upload() {
   const [target, setTarget] = useState("");
   const [loading, setLoading] = useState(false);
   const [datasets, setDatasets] = useState([]);
+  const [columns, setColumns] = useState([]);
   const [selectedDataset, setSelectedDataset] = useState("");
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -433,16 +434,50 @@ export default function Upload() {
     };
   }, [loading]);
 
-  const handleDatasetChange = (e) => {
-    setSelectedDataset(e.target.value);
-    if (e.target.value) setFile(null);
+  const readCsvHeader = async (file) => {
+    try {
+      const text = await file.text();
+      const firstLine = text.split(/\r?\n/)[0] || "";
+      return firstLine
+        .split(",")
+        .map((col) => col.trim())
+        .filter(Boolean);
+    } catch (err) {
+      console.error("Failed to parse CSV header", err);
+      return [];
+    }
   };
 
-  const handleFileChange = (e) => {
+  const handleDatasetChange = async (e) => {
+    const nextDataset = e.target.value;
+    setSelectedDataset(nextDataset);
+    setTarget("");
+    setColumns([]);
+
+    if (nextDataset) {
+      setFile(null);
+      try {
+        const res = await axios.post(
+          `${API}/load_dataset`,
+          new URLSearchParams({ name: nextDataset }),
+        );
+        setColumns(res.data.columns || []);
+      } catch (err) {
+        console.error(err);
+        setColumns([]);
+      }
+    }
+  };
+
+  const handleFileChange = async (e) => {
     const f = e.target.files[0];
     if (f) {
       setFile(f);
       setSelectedDataset("");
+      setTarget("");
+
+      const fileColumns = await readCsvHeader(f);
+      setColumns(fileColumns);
     }
   };
 
@@ -467,11 +502,13 @@ export default function Upload() {
           new URLSearchParams({ name: selectedDataset }),
         );
         columns = res.data.columns;
+        setColumns(columns);
       } else {
         const formData = new FormData();
         formData.append("file", file);
         const res = await axios.post(`${API}/upload`, formData);
         columns = res.data.columns;
+        setColumns(columns);
       }
 
       const trainRes = await axios.post(
@@ -484,6 +521,7 @@ export default function Upload() {
       localStorage.setItem("automl_results", JSON.stringify(scores));
       localStorage.setItem("automl_columns", JSON.stringify(columns));
       localStorage.setItem("automl_target", target);
+      localStorage.setItem("automl_types", JSON.stringify(trainRes.data.column_types));
 
       //  navigate
       navigate("/results", {
@@ -610,14 +648,19 @@ export default function Upload() {
               {/* Target column */}
               <div>
                 <div className="field-label">Target Column</div>
-                <input
-                  className="styled-input"
-                  placeholder="e.g. price, churn, label"
-                  value={target}
+                
+                <select
+                  className="styled-select"
                   onChange={(e) => setTarget(e.target.value)}
-                  autoComplete="off"
-                  spellCheck="false"
-                />
+                  value={target}
+                >
+                  <option value="">Choose a Target Column…</option>
+                  {columns.map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Submit */}

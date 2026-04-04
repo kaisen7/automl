@@ -417,14 +417,34 @@ const styles = `
   }
 `;
 
+function safeParseJSON(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 export default function Predictor() {
   const rawColumns = localStorage.getItem("automl_columns");
-  const target = localStorage.getItem("automl_target");
+  let target = localStorage.getItem("automl_target");
 
   const [input, setInput] = useState({});
   const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const parsedColumns = safeParseJSON(rawColumns);
+  const columns = Array.isArray(parsedColumns) ? parsedColumns : [];
+
+  // Create lowercase mapping (JS version of your Python logic)
+  const colMap = Object.fromEntries(
+    columns.map((col) => [col.toLowerCase(), col]),
+  );
+
+  const targetLower = target ? target.trim().toLowerCase() : null;
+
+  target = targetLower && colMap[targetLower];
 
   // Guard: no session data
   if (!rawColumns || !target) {
@@ -448,7 +468,9 @@ export default function Predictor() {
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
               </div>
-              <div className="guard-title" style={{ color: "#f87171" }}>No session data found</div>
+              <div className="guard-title" style={{ color: "#f87171" }}>
+                No session data found
+              </div>
               <div className="guard-sub">
                 Train a model first before running predictions.
               </div>
@@ -465,11 +487,18 @@ export default function Predictor() {
     );
   }
 
-  const columns = JSON.parse(rawColumns);
   const inputCols = columns.filter((col) => col !== target);
 
   const handleChange = (col, value) => {
-    setInput((prev) => ({ ...prev, [col]: value === "" ? "" : Number(value) }));
+    setInput((prev) => ({
+      ...prev,
+      [col]:
+        columnTypes[col]?.type === "numeric"
+          ? value === ""
+            ? ""
+            : Number(value)
+          : value,
+    }));
   };
 
   const handlePredict = async () => {
@@ -497,6 +526,9 @@ export default function Predictor() {
       setLoading(false);
     }
   };
+  const rawTypes = localStorage.getItem("automl_types");
+  const parsedTypes = safeParseJSON(rawTypes);
+  const columnTypes = parsedTypes && typeof parsedTypes === "object" ? parsedTypes : {};
 
   return (
     <Layout>
@@ -526,7 +558,7 @@ export default function Predictor() {
               <div className="section-label">Feature Inputs</div>
 
               {error && (
-                <div className="error-box" >
+                <div className="error-box">
                   <svg
                     width="13"
                     height="13"
@@ -550,13 +582,29 @@ export default function Predictor() {
                       <div className="field-label-dot" />
                       {col}
                     </div>
-                    <input
-                      className="styled-input"
-                      type="number"
-                      placeholder="enter value"
-                      value={input[col] ?? ""}
-                      onChange={(e) => handleChange(col, e.target.value)}
-                    />
+
+                    {columnTypes[col]?.type === "categorical" ? (
+                      <select
+                        className="styled-input"
+                        value={input[col] ?? ""}
+                        onChange={(e) => handleChange(col, e.target.value)}
+                      >
+                        <option value="">Select</option>
+                        {columnTypes[col].values.map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="styled-input"
+                        type="number"
+                        placeholder="enter value"
+                        value={input[col] ?? ""}
+                        onChange={(e) => handleChange(col, e.target.value)}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -578,7 +626,7 @@ export default function Predictor() {
               <div className="result-bar" />
               <div className="result-body">
                 <div className="result-left">
-                  <div className="result-icon" >
+                  <div className="result-icon">
                     <svg
                       width="22"
                       height="22"

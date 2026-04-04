@@ -149,13 +149,15 @@ async def upload_file(file: UploadFile = File(...)):
 async def train(target: str):
     global global_model, global_columns
     _require_dataset()
-
-    if target not in global_df.columns:
+    col_map = {col.lower(): col for col in global_df.columns}
+    target_lower = target.strip().lower()
+    if target_lower not in col_map:
         raise HTTPException(
             status_code=422,
-            detail=f"Target column '{target}' not found. Available: {list(global_df.columns)}"
+            detail=f"Target column '{target}' not found. Available: {', '.join(global_df.columns)}"
         )
-
+    
+    target=col_map[target_lower]
     if global_df[target].isnull().any():
         raise HTTPException(status_code=422, detail="Target column contains missing values.")
 
@@ -168,12 +170,28 @@ async def train(target: str):
     global_columns = columns
 
     meta = getattr(model, "_automl_meta", {})
+    column_types = {}
+
+    for col in global_df.columns:
+        if col == target:
+            continue
+
+        if global_df[col].dtype == "object":
+            column_types[col] = {
+                "type": "categorical",
+                "values": global_df[col].dropna().unique().tolist()
+            }
+        else:
+            column_types[col] = {
+                "type": "numeric"
+            }
     return {
         "scores": scores,
         "target": target,
         "problem_type": meta.get("problem_type"),
         "best_model": meta.get("best_model_name"),
         "best_cv_score": meta.get("best_cv_score"),
+        "column_types": column_types
     }
 
 
@@ -276,7 +294,7 @@ async def predict(data: dict):
         raise HTTPException(status_code=422, detail="Request body must be a non-empty JSON object.")
 
     try:
-        result = predict_model(global_model, data, global_columns)
+        result = predict_model(global_model, data, global_columns,global_df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
 
