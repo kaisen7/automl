@@ -288,3 +288,17 @@ animation: dot-bounce 1.2s infinite ease-in-out both;
 from { opacity: 0; transform: translateY(14px); }
 to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .eda-root { padding: 32px 16px 80px; }
+  .stat-strip { flex-direction: column; }
+  .stat-cell { border-right: none; border-bottom: 1px solid var(--border); padding: 12px 16px; }
+  .stat-cell:last-child { border-bottom: none; }
+  .stat-cell-value { font-size: 18px; }
+}
+
+@media (max-width: 480px) {
+  .page-title { font-size: 24px; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .stat-cell-value { font-size: 16px; }
+}
