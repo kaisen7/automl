@@ -5,7 +5,7 @@ import numpy as np
 import shutil
 import os
 
-from model import train_model, predict_model
+from model import train_model, predict_model, _infer_column_types
 
 app = FastAPI(title="AutoML API", version="2.0.0")
 
@@ -172,11 +172,12 @@ async def train(target: str):
     meta = getattr(model, "_automl_meta", {})
     column_types = {}
 
-    for col in global_df.columns:
-        if col == target:
-            continue
+    # Use the same inference as in training
+    input_df = global_df.drop(columns=[target])
+    numeric_cols, categorical_cols = _infer_column_types(input_df)
 
-        if global_df[col].dtype == "object":
+    for col in input_df.columns:
+        if col in categorical_cols:
             column_types[col] = {
                 "type": "categorical",
                 "values": global_df[col].dropna().unique().tolist()
