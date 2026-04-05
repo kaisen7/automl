@@ -240,16 +240,6 @@ const styles = `
   /* ── Page content ── */
   .layout-content {
     min-height: calc(100vh - 56px);
-    width: 100%;
-    max-width: 1300px;
-    margin: 0 auto;
-    padding: 0 20px;
-  }
-
-  .layout-content > * {
-    width: 100%;
-    max-width: 1300px;
-    margin: 0 auto;
   }
 
   /* ── Responsive ── */
