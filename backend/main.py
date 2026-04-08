@@ -1,9 +1,12 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import numpy as np
 import shutil
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor, Future
+import threading
 
 from model import train_model, predict_model, _infer_column_types
 
@@ -31,6 +34,12 @@ global_df = None
 global_model = None
 global_columns = None
 
+# ── Training cancellation state ───────────────────────────────────────────────
+_training_executor = ThreadPoolExecutor(max_workers=1)
+_current_training_future: Future | None = None
+_training_cancel_event = threading.Event()
+_training_lock = threading.Lock()
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _require_dataset():
@@ -50,6 +59,17 @@ def _safe_read_csv(path: str) -> pd.DataFrame:
         raise HTTPException(status_code=422, detail=f"Could not parse CSV: {e}")
 
 
+def _cancel_current_training():
+    """Signal any in-progress training to stop and wait briefly."""
+    global _current_training_future
+    with _training_lock:
+        _training_cancel_event.set()
+        future = _current_training_future
+    if future and not future.done():
+        # Give it up to 2 seconds to notice the cancel signal
+        future.cancel()
+
+
 def _compute_outliers(df: pd.DataFrame, numeric_cols: list) -> dict:
     """IQR-based outlier count per numeric column."""
     outliers = {}
@@ -67,11 +87,6 @@ def _compute_outliers(df: pd.DataFrame, numeric_cols: list) -> dict:
 
 
 def _compute_scatter_data(df: pd.DataFrame, corr: dict, numeric_cols: list, n_pairs: int = 6, sample_size: int = 200) -> dict:
-    """
-    Return up to n_pairs top-correlated (col_a, col_b) scatter point arrays.
-    Keys are formatted as "colA__colB".
-    """
-    # Collect unique pairs sorted by abs correlation descending
     pairs = []
     seen = set()
     cols = list(numeric_cols)
@@ -146,9 +161,11 @@ async def upload_file(file: UploadFile = File(...)):
 
 # ── Train ─────────────────────────────────────────────────────────────────────
 @app.post("/train")
-async def train(target: str):
-    global global_model, global_columns
+async def train(request: Request, target: str):
+    global global_model, global_columns, _current_training_future
+
     _require_dataset()
+
     col_map = {col.lower(): col for col in global_df.columns}
     target_lower = target.strip().lower()
     if target_lower not in col_map:
@@ -156,15 +173,49 @@ async def train(target: str):
             status_code=422,
             detail=f"Target column '{target}' not found. Available: {', '.join(global_df.columns)}"
         )
-    
-    target=col_map[target_lower]
+
+    target = col_map[target_lower]
     if global_df[target].isnull().any():
         raise HTTPException(status_code=422, detail="Target column contains missing values.")
 
+    # Cancel any previous training job
+    _cancel_current_training()
+
+    # Reset cancel event for new training run
+    _training_cancel_event.clear()
+
+    loop = asyncio.get_event_loop()
+
+    def run_training():
+        return train_model(global_df, target, cancel_event=_training_cancel_event)
+
+    # Submit training to thread pool
+    with _training_lock:
+        future = _training_executor.submit(run_training)
+        _current_training_future = future
+
     try:
-        model, scores, columns = train_model(global_df, target)
+        # Poll: run training while checking for client disconnect
+        while not future.done():
+            # Check if client disconnected
+            if await request.is_disconnected():
+                print("⚠️  Client disconnected — cancelling training.")
+                _training_cancel_event.set()
+                future.cancel()
+                raise HTTPException(status_code=499, detail="Client disconnected. Training cancelled.")
+
+            await asyncio.sleep(0.5)  # Check every 500ms
+
+        # Retrieve result (raises if training raised)
+        model, scores, columns = future.result()
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Training failed: {e}")
+    finally:
+        with _training_lock:
+            _current_training_future = None
 
     global_model = model
     global_columns = columns
@@ -172,7 +223,6 @@ async def train(target: str):
     meta = getattr(model, "_automl_meta", {})
     column_types = {}
 
-    # Use the same inference as in training
     input_df = global_df.drop(columns=[target])
     numeric_cols, categorical_cols = _infer_column_types(input_df)
 
@@ -186,6 +236,7 @@ async def train(target: str):
             column_types[col] = {
                 "type": "numeric"
             }
+
     return {
         "scores": scores,
         "target": target,
@@ -205,13 +256,9 @@ async def eda():
     numeric_df = df.select_dtypes(include=["number"])
     numeric_cols = list(numeric_df.columns)
 
-    # Summary stats
     summary = df.describe(include="all").replace({np.nan: None}).to_dict()
-
-    # Correlation
     corr = numeric_df.corr().replace({np.nan: 0}).to_dict() if not numeric_df.empty else {}
 
-    # Histograms
     histograms = {}
     for col in numeric_cols:
         counts, bins = np.histogram(df[col].dropna(), bins=10)
@@ -220,15 +267,12 @@ async def eda():
             for i in range(len(counts))
         ]
 
-    # Categorical distributions
     categorical = {}
     for col in df.select_dtypes(include=["object"]).columns:
         categorical[col] = df[col].value_counts().head(10).to_dict()
 
-    # Missing values
     missing = df.isnull().sum().to_dict()
 
-    # Feature importance (if model trained)
     importance = {}
     if global_model is not None:
         estimator = global_model
@@ -237,13 +281,8 @@ async def eda():
         if estimator is not None and hasattr(estimator, "feature_importances_"):
             importance = dict(zip(global_columns, estimator.feature_importances_.tolist()))
 
-    # ── NEW: Duplicate rows ───────────────────────────────────────────────────
     duplicate_rows = int(df.duplicated().sum())
-
-    # ── NEW: Outlier detection (IQR method) ──────────────────────────────────
     outliers = _compute_outliers(df, numeric_cols)
-
-    # ── NEW: Scatter data for top correlated pairs ────────────────────────────
     scatter_data = _compute_scatter_data(df, corr, numeric_cols)
 
     meta = getattr(global_model, "_automl_meta", {}) if global_model else {}
@@ -263,7 +302,6 @@ async def eda():
         "categorical_columns": meta.get("categorical_columns", list(df.select_dtypes("object").columns)),
         "missing_total": int(df.isnull().sum().sum()),
         "has_model": global_model is not None,
-        # ── New fields ────────────────────────────────────────────────────────
         "duplicate_rows": duplicate_rows,
         "outliers": outliers,
         "scatter_data": scatter_data,
@@ -295,16 +333,20 @@ async def predict(data: dict):
         raise HTTPException(status_code=422, detail="Request body must be a non-empty JSON object.")
 
     try:
-        result = predict_model(global_model, data, global_columns,global_df)
+        result = predict_model(global_model, data, global_columns, global_df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
 
     return result
 
 
+# ── Reset ─────────────────────────────────────────────────────────────────────
 @app.post("/reset")
 async def reset():
     global global_df, global_model, global_columns
+
+    # Cancel any in-progress training
+    _cancel_current_training()
 
     global_df = None
     global_model = None

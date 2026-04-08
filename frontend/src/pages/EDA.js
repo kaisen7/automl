@@ -13,7 +13,7 @@ import {
   TEXT_MUT,
   BORDER,
   PIE_COLORS,
-} from '../utils/constants.js'
+} from "../utils/constants.js";
 
 import {
   BarChart,
@@ -31,8 +31,6 @@ import {
   Scatter,
   ZAxis,
 } from "recharts";
-
-
 
 // ── Tooltip ───────────────────────────────────────────────────────────────────
 const ChartTooltip = ({ active, payload, label }) => {
@@ -526,7 +524,7 @@ function ScatterPairs({
       <div className="section-label">Scatter Plots · Top Correlated Pairs</div>
       <div className="chart-grid">
         {topPairs.map(({ colA, colB, corr }) => {
-          const key = `${colA}__${colB}`;
+          const key = [colA, colB].sort().join("__");
           const isSelected = selectedPair === key;
           const corrAbs = Math.abs(corr);
           const corrBadgeColor =
@@ -545,7 +543,10 @@ function ScatterPairs({
               : corrAbs > 0.4
                 ? "rgba(240,192,64,0.4)"
                 : "rgba(255,255,255,0.1)";
-          const chartPoints = scatterData?.[key] || [];
+          const chartPoints =
+            scatterData?.[`${colA}__${colB}`] ||
+            scatterData?.[`${colB}__${colA}`] ||
+            [];
 
           return (
             <div

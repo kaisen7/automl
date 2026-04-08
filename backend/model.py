@@ -6,6 +6,12 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import r2_score, accuracy_score, f1_score, mean_absolute_error
 import pandas as pd
 import numpy as np
+import threading
+
+
+class TrainingCancelledError(Exception):
+    """Raised when training is interrupted by a cancel signal."""
+    pass
 
 
 def _detect_problem_type(y):
@@ -44,12 +50,21 @@ def _infer_column_types(df: pd.DataFrame):
     return numeric_cols, categorical_cols
 
 
-def train_model(df, target):
+def _check_cancel(cancel_event: threading.Event | None):
+    """Raise TrainingCancelledError if the cancel signal has been set."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise TrainingCancelledError("Training was cancelled by client disconnect.")
+
+
+def train_model(df, target, cancel_event: threading.Event | None = None):
     col_map = {col.lower(): col for col in df.columns}
     target_lower = target.strip().lower()
     if target_lower not in col_map:
         raise ValueError(f"Target column '{target}' not found in dataset.")
     target = col_map[target_lower]
+
+    _check_cancel(cancel_event)
+
     X = df.drop(columns=[target])
     y = df[target].copy()
 
@@ -60,6 +75,8 @@ def train_model(df, target):
     if problem_type == "classification" and y.dtype == "object":
         label_encoder = LabelEncoder()
         y = pd.Series(label_encoder.fit_transform(y), index=y.index)
+
+    _check_cancel(cancel_event)
 
     # --- Detect and normalize original column types before encoding ---
     numeric_cols_orig, categorical_cols_orig = _infer_column_types(X)
@@ -74,33 +91,31 @@ def train_model(df, target):
         else:
             X[col] = X[col].astype(str).fillna("missing")
 
+    _check_cancel(cancel_event)
+
     # --- One-hot encode ---
     X = pd.get_dummies(X, drop_first=True)
     columns = list(X.columns)
-    
+
     # --- Remove problematic values ---
     X = X.replace([np.inf, -np.inf], np.nan)
-
-    # Drop rows with NaN
     valid_idx = X.dropna().index
     X = X.loc[valid_idx]
     y = y.loc[valid_idx]
-
-    # Remove constant columns
     X = X.loc[:, X.nunique() > 1]
-    
+
+    _check_cancel(cancel_event)
+
     stratify = None
     if problem_type == "classification" and y.value_counts().min() >= 2:
         stratify = y
-
-    
 
     # --- Train / test split ---
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=stratify
     )
 
-    # --- Define candidate models (pipelines with optional scaling) ---
+    # --- Define candidate models ---
     if problem_type == "classification":
         candidates = {
             "LogisticRegression": Pipeline([
@@ -135,26 +150,40 @@ def train_model(df, target):
     scores = {}
 
     for name, model in candidates.items():
+        # ── Check for cancellation before each model ──────────────────────────
+        _check_cancel(cancel_event)
+
         try:
-            # Dynamic cross-validation on training set
             cv = min(5, len(y_train))
             if problem_type == "classification":
                 cv = min(cv, y_train.value_counts().min())
-            cv_scores = cross_val_score(model, X_train, y_train, cv=cv, scoring=cv_scoring, n_jobs=1,error_score=np.nan)
-            
-            valid_scores = cv_scores[~np.isnan(cv_scores)]
 
+            cv_scores = cross_val_score(
+                model, X_train, y_train,
+                cv=cv, scoring=cv_scoring,
+                n_jobs=1,          # keep as 1 so the cancel check isn't bypassed
+                error_score=np.nan
+            )
+
+            # ── Check again after potentially long CV step ────────────────────
+            _check_cancel(cancel_event)
+
+            valid_scores = cv_scores[~np.isnan(cv_scores)]
             if len(valid_scores) == 0:
                 raise ValueError("All CV folds failed")
 
             cv_mean = float(np.mean(valid_scores))
             cv_std = float(np.std(valid_scores))
-            
+
             if len(valid_scores) < len(cv_scores):
                 print(f"⚠️ {name}: {len(cv_scores)-len(valid_scores)} folds failed, using remaining {len(valid_scores)}")
-                
+
             # Final fit on full train set
             model.fit(X_train, y_train)
+
+            # ── Check after fit ───────────────────────────────────────────────
+            _check_cancel(cancel_event)
+
             preds = model.predict(X_test)
 
             if problem_type == "classification":
@@ -182,17 +211,17 @@ def train_model(df, target):
                 best_score = selection_score
                 best_model = model
 
+        except TrainingCancelledError:
+            # Bubble up immediately — do not swallow cancellation
+            print(f"🛑 Training cancelled during {name}.")
+            raise
         except Exception as e:
             print(f"{name} failed:", e)
-
-            scores[name] = {
-                "error": str(e)
-            }
+            scores[name] = {"error": str(e)}
 
     if best_model is None:
         raise RuntimeError("All models failed to train.")
 
-    # Attach metadata for downstream use
     best_model._automl_meta = {
         "problem_type": problem_type,
         "target": target,
@@ -230,7 +259,6 @@ def predict_model(model, data, columns, global_df):
 
     preds = model.predict(df)
 
-    # Decode label if classifier used LabelEncoder
     label_classes = meta.get("label_classes")
     decoded_preds = preds.tolist()
     if label_classes and all(isinstance(p, (int, np.integer)) for p in preds):
@@ -243,7 +271,6 @@ def predict_model(model, data, columns, global_df):
         "target": meta.get("target"),
     }
 
-    # Include predicted probabilities for classifiers
     if hasattr(model, "predict_proba"):
         try:
             proba = model.predict_proba(df)[0].tolist()
