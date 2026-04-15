@@ -724,6 +724,9 @@ function TargetDistributionPanel({
         <ResponsiveContainer width="100%" height={380}>
           <PieChart>
             <Pie
+              isAnimationActive={true}
+              animationBegin={300}
+              animationDuration={1000}
               data={chartData}
               dataKey="value"
               nameKey="name"
@@ -770,6 +773,9 @@ function TargetDistributionPanel({
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
+                  isAnimationActive={true}
+                  animationBegin={300}
+                  animationDuration={1000}
                   data={chartData}
                   dataKey="value"
                   nameKey="name"
@@ -857,6 +863,10 @@ function CategoricalTargetPanel({ targetColumn, distributions, onCardExpand }) {
                       {info.target_labels.map((label, labelIndex) => (
                         <Bar
                           key={label}
+                          isAnimationActive={true} // Ensure this is true
+                          animationBegin={200} // Slight delay to ensure layout is ready
+                          animationDuration={1200}
+                          animationEasing="ease-in-out"
                           dataKey={label}
                           stackId="target"
                           fill={PIE_COLORS[labelIndex % PIE_COLORS.length]}
@@ -913,6 +923,10 @@ function CategoricalTargetPanel({ targetColumn, distributions, onCardExpand }) {
                   {info.target_labels.map((label, labelIndex) => (
                     <Bar
                       key={label}
+                      isAnimationActive={true} // Ensure this is true
+                      animationBegin={200} // Slight delay to ensure layout is ready
+                      animationDuration={1200}
+                      animationEasing="ease-in-out"
                       dataKey={label}
                       stackId="target"
                       fill={PIE_COLORS[labelIndex % PIE_COLORS.length]}
@@ -1285,6 +1299,10 @@ function HistogramPanel({ histograms, onCardExpand }) {
                         cursor={{ fill: "rgba(99,210,179,0.06)" }}
                       />
                       <Bar
+                        isAnimationActive={true} // Ensure this is true
+                        animationBegin={200} // Slight delay to ensure layout is ready
+                        animationDuration={1200}
+                        animationEasing="ease-in-out"
                         dataKey="count"
                         fill={ACCENT}
                         radius={[2, 2, 0, 0]}
@@ -1334,7 +1352,15 @@ function HistogramPanel({ histograms, onCardExpand }) {
                     content={<ChartTooltip />}
                     cursor={{ fill: "rgba(99,210,179,0.06)" }}
                   />
-                  <Bar dataKey="count" fill={ACCENT} radius={[2, 2, 0, 0]} />
+                  <Bar
+                    isAnimationActive={true} // Ensure this is true
+                    animationBegin={200} // Slight delay to ensure layout is ready
+                    animationDuration={1200}
+                    animationEasing="ease-in-out"
+                    dataKey="count"
+                    fill={ACCENT}
+                    radius={[2, 2, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1368,6 +1394,9 @@ function CategoricalDistributionPanel({ categorical, onCardExpand }) {
                     <ResponsiveContainer width="100%" height={360}>
                       <PieChart>
                         <Pie
+                          isAnimationActive={true}
+                          animationBegin={300}
+                          animationDuration={1000}
                           data={chartData}
                           dataKey="value"
                           nameKey="name"
@@ -1400,6 +1429,9 @@ function CategoricalDistributionPanel({ categorical, onCardExpand }) {
                 <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
                     <Pie
+                      isAnimationActive={true}
+                      animationBegin={300}
+                      animationDuration={1000}
                       data={chartData}
                       dataKey="value"
                       nameKey="name"
@@ -1594,7 +1626,15 @@ function FeatureImportancePanel({ featureImportance, onCardExpand }) {
                     content={<ChartTooltip />}
                     cursor={{ fill: "rgba(167,139,250,0.06)" }}
                   />
-                  <Bar dataKey="value" fill={VIOLET} radius={[0, 2, 2, 0]} />
+                  <Bar
+                    isAnimationActive={true} // Ensure this is true
+                    animationBegin={200} // Slight delay to ensure layout is ready
+                    animationDuration={1200}
+                    animationEasing="ease-in-out"
+                    dataKey="value"
+                    fill={VIOLET}
+                    radius={[0, 2, 2, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>,
@@ -1644,7 +1684,15 @@ function FeatureImportancePanel({ featureImportance, onCardExpand }) {
                 content={<ChartTooltip />}
                 cursor={{ fill: "rgba(167,139,250,0.06)" }}
               />
-              <Bar dataKey="value" fill={VIOLET} radius={[0, 2, 2, 0]} />
+              <Bar
+                isAnimationActive={true} // Ensure this is true
+                animationBegin={200} // Slight delay to ensure layout is ready
+                animationDuration={1200}
+                animationEasing="ease-in-out"
+                dataKey="value"
+                fill={VIOLET}
+                radius={[0, 2, 2, 0]}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -2093,8 +2141,9 @@ export default function EDA() {
   const targetColumn = data?.target_column;
   const targetType = data?.target_type;
   const targetDistribution = data?.target_distribution || {};
-  const categoricalTargetDistribution =data?.categorical_target_distribution || {};
-  
+  const categoricalTargetDistribution =
+    data?.categorical_target_distribution || {};
+
   const renderExpandedSection = () => {
     if (!expandedSection) return null;
     switch (expandedSection) {
@@ -2232,7 +2281,6 @@ export default function EDA() {
     (a, b) => a + b,
     0,
   );
-  
 
   return (
     <Layout>
