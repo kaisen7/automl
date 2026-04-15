@@ -9,11 +9,12 @@ import numpy as np
 import threading
 
 
+#error handling 
 class TrainingCancelledError(Exception):
     """Raised when training is interrupted by a cancel signal."""
     pass
 
-
+#CLASSIFICATION OR REGRESSION
 def _detect_problem_type(y):
     """Heuristic: classification if target is string or low-cardinality int."""
     if y.dtype == "object" or pd.api.types.is_bool_dtype(y):
@@ -23,7 +24,7 @@ def _detect_problem_type(y):
         return "classification"
     return "regression"
 
-
+#returns column types
 def _infer_column_types(df: pd.DataFrame):
     """Infer numeric vs categorical columns, including numeric-like object columns."""
     numeric_cols = []
@@ -31,16 +32,17 @@ def _infer_column_types(df: pd.DataFrame):
 
     for col in df.columns:
         series = df[col]
-        if pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
+        if pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):   #NUMBER OR BOOLEAN
             numeric_cols.append(col)
             continue
 
         non_null = series.dropna().astype(str).str.strip()
+
         if non_null.empty:
             categorical_cols.append(col)
             continue
 
-        coerced = pd.to_numeric(non_null, errors="coerce")
+        coerced = pd.to_numeric(non_null, errors="coerce")                             # <--  HOW MANY ARE NUMERIC ?
         converted_ratio = coerced.notna().mean()
         if converted_ratio >= 0.9 and coerced.notna().sum() >= 3:
             numeric_cols.append(col)
@@ -54,13 +56,14 @@ def _check_cancel(cancel_event: threading.Event | None):
     """Raise TrainingCancelledError if the cancel signal has been set."""
     if cancel_event is not None and cancel_event.is_set():
         raise TrainingCancelledError("Training was cancelled by client disconnect.")
-
+#CANCEL TRAINING
 
 def train_model(df, target, cancel_event: threading.Event | None = None):
     col_map = {col.lower(): col for col in df.columns}
     target_lower = target.strip().lower()
     if target_lower not in col_map:
-        raise ValueError(f"Target column '{target}' not found in dataset.")
+        raise ValueError(f"Target column '{target}' not found in dataset.")    
+   #<---->#target column not in dataset
     target = col_map[target_lower]
 
     _check_cancel(cancel_event)
@@ -70,11 +73,11 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
 
     problem_type = _detect_problem_type(y)
 
-    # --- Encode classification target ---
-    label_encoder = None
+    # --- Encode classification target ---      #WHY USING LABEL ENCODER INSTEAD OF DUMMIES 
+    label_encoder = None   
     if problem_type == "classification" and y.dtype == "object":
         label_encoder = LabelEncoder()
-        y = pd.Series(label_encoder.fit_transform(y), index=y.index)
+        y = pd.Series(label_encoder.fit_transform(y), index=y.index)             #STRINGS TO NUMBERS
 
     _check_cancel(cancel_event)
 
@@ -82,10 +85,13 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
     numeric_cols_orig, categorical_cols_orig = _infer_column_types(X)
     numeric_fill_values = {}
 
+
+# ------FILLING MISSING/NA VALUES----------
     for col in X.columns:
         if col in numeric_cols_orig:
             X[col] = pd.to_numeric(X[col], errors="coerce")
-            fill_value = float(X[col].median()) if not X[col].dropna().empty else 0.0
+            fill_value = float(X[col].median()) if not X[col].dropna().empty else 0.0   #IF NA EXISTS THEN FILL VALUE WITH MEDIAN 
+            
             X[col] = X[col].fillna(fill_value)
             numeric_fill_values[col] = fill_value
         else:
@@ -102,20 +108,25 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
     valid_idx = X.dropna().index
     X = X.loc[valid_idx]
     y = y.loc[valid_idx]
-    X = X.loc[:, X.nunique() > 1]
-
+    X = X.loc[:, X.nunique() > 1]    #remove columns with only one value 
+  
     _check_cancel(cancel_event)
 
     stratify = None
-    if problem_type == "classification" and y.value_counts().min() >= 2:
+    if problem_type == "classification" and y.value_counts().min() >= 2:        #if CLASSIFICATION and min frequency is 2 
         stratify = y
-
+      #<---------------------------------------->
+      
+      
     # --- Train / test split ---
+    #SPLITTING DATA ----------------------> 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=stratify
     )
 
     # --- Define candidate models ---
+    
+    
     if problem_type == "classification":
         candidates = {
             "LogisticRegression": Pipeline([
@@ -144,7 +155,11 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
             ),
         }
         cv_scoring = "r2"
-
+ 
+ 
+ #<======================================================>
+ 
+ 
     best_model = None
     best_score = -np.inf
     scores = {}
@@ -154,6 +169,7 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
         _check_cancel(cancel_event)
 
         try:
+            #<-----------------------CROSS VALIDATION--------------------->
             cv = min(5, len(y_train))
             if problem_type == "classification":
                 cv = min(cv, y_train.value_counts().min())
@@ -177,7 +193,7 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
 
             if len(valid_scores) < len(cv_scores):
                 print(f"⚠️ {name}: {len(cv_scores)-len(valid_scores)} folds failed, using remaining {len(valid_scores)}")
-
+#<==================================== FINAL FITTING ====================================>
             # Final fit on full train set
             model.fit(X_train, y_train)
 
@@ -185,13 +201,14 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
             _check_cancel(cancel_event)
 
             preds = model.predict(X_test)
-
+ 
+ # CV MEAN USED TO CHOOSE THE BEST MODEL 
             if problem_type == "classification":
                 test_score = float(accuracy_score(y_test, preds))
                 f1 = float(f1_score(y_test, preds, average="weighted", zero_division=0))
                 scores[name] = {
                     "cv_mean": round(cv_mean, 4),
-                    "cv_std": round(cv_std, 4),
+                    "cv_std": round(cv_std, 4),                   # F1 SCORE ///// ACCURACY //////// CV MEAN AND SD 
                     "test_accuracy": round(test_score, 4),
                     "test_f1_weighted": round(f1, 4),
                 }
