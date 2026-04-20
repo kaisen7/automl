@@ -58,14 +58,16 @@ class Feedback(BaseModel):
 
 def send_feedback_email(fb: Feedback):
     target_email = "automlquery@gmail.com"
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", 587))
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASSWORD")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com").strip()
+    try:
+        smtp_port = int(str(os.getenv("SMTP_PORT", "587")).strip())
+    except:
+        smtp_port = 587
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_pass = os.getenv("SMTP_PASSWORD", "").replace(" ", "").strip()
 
     if not smtp_user or not smtp_pass:
-        print("⚠️ SMTP credentials not set. Logging feedback instead.")
-        print(f"Feedback from {fb.name} ({fb.email}): {fb.query}")
+        print("⚠️ SMTP credentials not set. Check your (.env) file.")
         return False
 
     try:
@@ -77,13 +79,19 @@ def send_feedback_email(fb: Feedback):
         body = f"Name: {fb.name}\nEmail: {fb.email}\n\nQuery:\n{fb.query}"
         msg.attach(MIMEText(body, "plain"))
 
+        print(f"📧 Attempting to send email to {target_email} via {smtp_host}...")
         with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.set_debuglevel(0) # Set to 1 for verbose SMTP logs
             server.starttls()
             server.login(smtp_user, smtp_pass)
             server.send_message(msg)
+        print("✅ Email sent successfully!")
         return True
+    except smtplib.SMTPAuthenticationError:
+        print("❌ SMTP Authentication Failed. Check your email and App Password.")
+        return False
     except Exception as e:
-        print(f"❌ Failed to send email: {e}")
+        print(f"❌ Failed to send email: {type(e).__name__} - {e}")
         return False
 
 
