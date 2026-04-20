@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import FeedbackForm from "./FeedbackForm";
 import "./Layout.css"
 
 
@@ -93,6 +94,7 @@ export default function Layout({ children }) {
       </div>
 
       <main className="layout-content">{children}</main>
+      <FeedbackForm />
     </>
   );
 }

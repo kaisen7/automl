@@ -9,6 +9,13 @@ import io
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, Future
 import threading
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from model import train_model, predict_model, predict_dataset as predict_dataset_model, _infer_column_types, _find_redundant_features
 
@@ -41,6 +48,43 @@ _training_executor = ThreadPoolExecutor(max_workers=1)
 _current_training_future: Future | None = None
 _training_cancel_event = threading.Event()
 _training_lock = threading.Lock()
+
+
+class Feedback(BaseModel):
+    name: str
+    email: str
+    query: str
+
+
+def send_feedback_email(fb: Feedback):
+    target_email = "automlquery@gmail.com"
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASSWORD")
+
+    if not smtp_user or not smtp_pass:
+        print("⚠️ SMTP credentials not set. Logging feedback instead.")
+        print(f"Feedback from {fb.name} ({fb.email}): {fb.query}")
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = smtp_user
+        msg["To"] = target_email
+        msg["Subject"] = f"AutoML Feedback: {fb.name}"
+
+        body = f"Name: {fb.name}\nEmail: {fb.email}\n\nQuery:\n{fb.query}"
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+        return False
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -496,3 +540,13 @@ async def reset():
     global_columns = None
 
     return {"message": "State reset successful"}
+
+
+
+
+@app.post("/feedback")
+async def receive_feedback(fb: Feedback):
+    success = send_feedback_email(fb)
+    if not success:
+        return {"status": "error", "message": "Feedback received but email failed to send."}
+    return {"status": "success", "message": "Feedback sent successfully."}

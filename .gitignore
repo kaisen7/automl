@@ -1,12 +1,13 @@
+# Updated root .gitignore
 Auto-ML/
 
+# Common
 .DS_Store
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-
 venv/
 .venv
 node_modules/
@@ -15,3 +16,17 @@ node_modules/
 *.swp
 *.swo
 *~
+# Frontend Specific
+frontend/.env
+frontend/.env.production
+frontend/.pnp
+frontend/.pnp.js
+frontend/coverage/
+frontend/build/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/package-lock.json
+
+# Specialized
+backend/data/datasets/new.csv

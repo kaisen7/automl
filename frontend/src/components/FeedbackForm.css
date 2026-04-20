@@ -1,0 +1,184 @@
+.feedback-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+/* ── Toggle Button ── */
+.feedback-toggle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #0a0b0f;
+  border: none;
+  box-shadow: 0 4px 20px rgba(99, 210, 179, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  flex-shrink: 0;
+}
+
+.feedback-toggle:hover {
+  transform: scale(1.1) rotate(5deg);
+  box-shadow: 0 6px 24px rgba(99, 210, 179, 0.5);
+}
+
+.feedback-toggle:active {
+  transform: scale(0.95);
+}
+
+/* ── Feedback Card ── */
+.feedback-card {
+  width: 320px;
+  background: rgba(17, 19, 24, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-active);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  animation: cardIn 0.4s cubic-bezier(0.165, 0.84, 0.44, 1) both;
+  transform-origin: bottom right;
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.feedback-header h3 {
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.feedback-header h3 span {
+  color: var(--accent);
+}
+
+.feedback-header p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+/* ── Form Styles ── */
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.input-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-field label {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.input-field input,
+.input-field textarea {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.input-field input:focus,
+.input-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(99, 210, 179, 0.05);
+}
+
+.fb-submit {
+  margin-top: 8px;
+  background: var(--accent);
+  color: #0a0b0f;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: var(--sans);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fb-submit:hover:not(:disabled) {
+  background: #7ae4c8;
+  transform: translateY(-2px);
+}
+
+.fb-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.fb-error {
+  font-size: 12px;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.fb-success {
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-active);
+}
+
+/* ── Spinner ── */
+.fb-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(10, 11, 15, 0.2);
+  border-top-color: #0a0b0f;
+  border-radius: 50%;
+  animation: fb-spin 0.6s linear infinite;
+}
+
+@keyframes fb-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .feedback-card {
+    width: calc(100vw - 48px);
+  }
+}
