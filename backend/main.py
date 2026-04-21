@@ -47,7 +47,7 @@ _training_cancel_event = threading.Event()
 _training_lock = threading.Lock()
 
 
-# ── history helpers ──────────────────────────────────────────────────────────
+# --- history helpers ---
 
 def _session_dir(name: str) -> str:
     """returns path to this dataset's history folder, creates it if needed"""
@@ -70,8 +70,8 @@ def _save_session(
     try:
         d = _session_dir(dataset_name)
 
-        # 1. dataset CSV
-        df.to_csv(os.path.join(d, "dataset.csv"), index=False)
+        # 1. dataset CSV (skipped to save space, metadata + eda.json are enough)
+        # df.to_csv(os.path.join(d, "dataset.csv"), index=False)
 
         # 2. best model pickle
         with open(os.path.join(d, "model.pkl"), "wb") as f:
@@ -81,7 +81,7 @@ def _save_session(
         with open(os.path.join(d, "columns.pkl"), "wb") as f:
             pickle.dump(columns, f)
 
-        # 4. metadata — all scores + train response fields + timestamp
+        # 4. metadata ? all scores + train response fields + timestamp
         meta = {
             "dataset_name": dataset_name,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -102,10 +102,10 @@ def _save_session(
         with open(os.path.join(d, "eda.json"), "w") as f:
             json.dump(eda_payload, f)
 
-        print(f"✅ Session saved → {d}")
+        print(f"Session saved -> {d}")
     except Exception as e:
         # never crash the main response because of history saving
-        print(f"⚠️  Failed to save history session: {e}")
+        print(f"Failed to save history session: {e}")
 
 
 def _load_metadata(name: str) -> dict | None:
@@ -281,7 +281,7 @@ async def upload_file(file: UploadFile = File(...)):
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=415, detail=f"Only CSV files are supported. Got: '{ext}'")
 
-    # read entirely into memory — never write to disk
+    # read entirely into memory ? never write to disk
     try:
         contents = await file.read()
         global_df = pd.read_csv(io.BytesIO(contents))
@@ -336,7 +336,7 @@ async def train(request: Request, target: str):
         # keep checking if client disconnected while training runs
         while not future.done():
             if await request.is_disconnected():
-                print("⚠️  Client disconnected — cancelling training.")
+                print("(!) Client disconnected -- cancelling training.")
                 _training_cancel_event.set()
                 future.cancel()
                 raise HTTPException(status_code=499, detail="Client disconnected. Training cancelled.")
@@ -383,12 +383,12 @@ async def train(request: Request, target: str):
         "redundant_features": redundant,
     }
 
-    # ── persist session to history asynchronously ─────────────────────
+    # --- persist session to history asynchronously ---
     # compute eda now (same logic as /eda endpoint) so we cache it
     try:
         eda_payload = _compute_eda_payload()
     except Exception as e:
-        print(f"⚠️  EDA snapshot failed: {e}")
+        print(f"(!) EDA snapshot failed: {e}")
         eda_payload = {}
 
     dataset_name = global_dataset_name or "dataset"
@@ -403,7 +403,7 @@ async def train(request: Request, target: str):
         train_response,
         eda_payload,
     )
-    # ──────────────────────────────────────────────────────────────────
+    # ------------------------------------------------------------------
 
     return train_response
 
@@ -427,7 +427,7 @@ def _compute_eda_payload() -> dict:
     for col in num_cols:
         counts, bins = np.histogram(display_df[col].dropna(), bins=6)
         histograms[col] = [
-            {"bin": f"{round(bins[i], 2)}–{round(bins[i+1], 2)}", "count": int(counts[i])}
+            {"bin": f"{round(bins[i], 2)}?{round(bins[i+1], 2)}", "count": int(counts[i])}
             for i in range(len(counts))
         ]
 
@@ -570,6 +570,16 @@ def _compute_eda_payload() -> dict:
 
 @app.get("/eda")
 async def eda():
+    # If we are in a history session, try to return the cached EDA snapshot first
+    if global_dataset_name:
+        h_path = os.path.join(HISTORY_DIR, global_dataset_name, "eda.json")
+        if os.path.exists(h_path):
+            try:
+                with open(h_path) as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"(!) Failed to load cached EDA: {e}")
+
     _require_dataset()
     return _compute_eda_payload()
 
@@ -680,11 +690,12 @@ async def load_history_session(name: str):
     if meta is None:
         raise HTTPException(status_code=500, detail="Session metadata is missing or corrupt.")
 
-    # load dataset
+    # load dataset (optional now)
     ds_path = os.path.join(d, "dataset.csv")
-    if not os.path.exists(ds_path):
-        raise HTTPException(status_code=500, detail="Session dataset file is missing.")
-    global_df = _safe_read_csv(ds_path)
+    if os.path.exists(ds_path):
+        global_df = _safe_read_csv(ds_path)
+    else:
+        global_df = None
 
     # load model
     model_path = os.path.join(d, "model.pkl")
@@ -705,7 +716,7 @@ async def load_history_session(name: str):
 
     # original_columns = raw CSV column names (what Predictor/Upload pages use)
     # feature_columns  = post-one-hot model input columns (used only for prediction)
-    original_columns = meta.get("original_columns", list(global_df.columns))
+    original_columns = meta.get("original_columns", list(global_df.columns) if global_df is not None else [])
 
     return {
         "scores": meta.get("scores", {}),
