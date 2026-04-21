@@ -137,6 +137,10 @@ export default function Upload() {
         "automl_redundant_features",
         JSON.stringify(trainRes.data.redundant_features || redundantFeatures),
       );
+      localStorage.setItem(
+        "automl_dataset_name",
+        (selectedDataset || (file ? file.name : "dataset")).replace(/\.[^/.]+$/, ""),
+      );
 
       //  navigate
       navigate("/results", {
