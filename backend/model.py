@@ -90,7 +90,7 @@ def _check_cancel(cancel_event: threading.Event | None):
         raise TrainingCancelledError("Training was cancelled by client disconnect.")
 
 
-def _prepare_predict_input(df: pd.DataFrame, numeric_cols: list, fill_vals: dict, columns: list, global_df: pd.DataFrame):
+def _prepare_predict_input(df: pd.DataFrame, numeric_cols: list, fill_vals: dict, columns: list, known_categorical_values: dict = None):
     """clean up raw input data so it matches what the model expects"""
     X = df.copy()
     for col in X.columns:
@@ -100,8 +100,8 @@ def _prepare_predict_input(df: pd.DataFrame, numeric_cols: list, fill_vals: dict
         else:
             X[col] = X[col].astype(str).fillna("missing")
             # only allow values the model has seen before
-            if col in global_df.columns:
-                known_vals = global_df[col].dropna().astype(str).unique()
+            if known_categorical_values and col in known_categorical_values:
+                known_vals = set(known_categorical_values[col])
                 X[col] = X[col].where(X[col].isin(known_vals), "missing")
 
     X = pd.get_dummies(X)
@@ -268,7 +268,7 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
             cv_std = float(np.std(good_scores))
 
             if len(good_scores) < len(cv_scores):
-                print(f"⚠️ {name}: {len(cv_scores)-len(good_scores)} folds failed, using remaining {len(good_scores)}")
+                print(f"(!) {name}: {len(cv_scores)-len(good_scores)} folds failed, using remaining {len(good_scores)}")
 
             # train on full training set
             model.fit(X_train, y_train)
@@ -303,7 +303,7 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
                 best_model = model
 
         except TrainingCancelledError:
-            print(f"🛑 Training cancelled during {name}.")
+            print(f"[STOP] Training cancelled during {name}.")
             raise
         except Exception as e:
             print(f"{name} failed:", e)
@@ -311,6 +311,12 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
 
     if best_model is None:
         raise RuntimeError("All models failed to train.")
+
+    # Collect unique categorical values for future prediction validation
+    known_values = {}
+    for col in cat_cols:
+        if col in df.columns:
+            known_values[col] = df[col].dropna().astype(str).unique().tolist()
 
     # stash metadata on the model object so we can use it later
     best_model._automl_meta = {
@@ -320,6 +326,7 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
         "num_features": len(columns),
         "numeric_columns": num_cols,
         "categorical_columns": cat_cols,
+        "known_categorical_values": known_values, # for prediction validation
         "numeric_fill_values": fill_vals,
         "original_columns": df.drop(columns=[target]).columns.tolist(),
         "redundant_features": redundant,
@@ -331,7 +338,7 @@ def train_model(df, target, cancel_event: threading.Event | None = None):
     return best_model, scores, columns
 
 
-def predict_model(model, data, columns, global_df):
+def predict_model(model, data, columns, global_df=None):
     """run prediction on a single row or a dataframe"""
     if isinstance(data, pd.DataFrame):
         df = data.copy()
@@ -341,8 +348,9 @@ def predict_model(model, data, columns, global_df):
     meta = getattr(model, "_automl_meta", {})
     num_cols = set(meta.get("numeric_columns", []))
     fill_vals = meta.get("numeric_fill_values", {})
+    known_cats = meta.get("known_categorical_values")
 
-    df = _prepare_predict_input(df, num_cols, fill_vals, columns, global_df)
+    df = _prepare_predict_input(df, num_cols, fill_vals, columns, known_cats)
 
     preds = model.predict(df)
 
@@ -372,13 +380,16 @@ def predict_model(model, data, columns, global_df):
     return result
 
 
-def predict_dataset(model, file_df, columns, global_df):
+def predict_dataset(model, file_df, columns, global_df=None):
     """run predictions on a whole csv file"""
     if file_df.empty:
         return []
 
     meta = getattr(model, "_automl_meta", {})
-    orig_cols = meta.get("original_columns", list(global_df.columns))
+    orig_cols = meta.get("original_columns", [])
+    if not orig_cols and global_df is not None:
+        orig_cols = list(global_df.columns)
+        
     missing = [c for c in orig_cols if c not in file_df.columns]
     if missing:
         raise ValueError(f"Uploaded dataset is missing columns: {', '.join(missing)}")
@@ -386,8 +397,9 @@ def predict_dataset(model, file_df, columns, global_df):
     input_df = file_df[orig_cols].copy()
     num_cols = set(meta.get("numeric_columns", []))
     fill_vals = meta.get("numeric_fill_values", {})
+    known_cats = meta.get("known_categorical_values")
 
-    input_df = _prepare_predict_input(input_df, num_cols, fill_vals, columns, global_df)
+    input_df = _prepare_predict_input(input_df, num_cols, fill_vals, columns, known_cats)
     preds = model.predict(input_df)
 
     label_classes = meta.get("label_classes")
