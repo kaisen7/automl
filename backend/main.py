@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import pandas as pd
 import numpy as np
-import shutil, os, io, asyncio
+import os, io, asyncio, pickle, json
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, Future
 import threading
 import requests
@@ -25,24 +26,98 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# where uploaded files go
-UPLOAD_DIR = "data"
+# where datasets and history are stored
 DATASET_DIR = "data/datasets"
+HISTORY_DIR = "data/history"
 ALLOWED_EXTENSIONS = {".csv"}
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(DATASET_DIR, exist_ok=True)
+os.makedirs(HISTORY_DIR, exist_ok=True)
 
 # global state - keeps track of whats loaded right now
 global_df = None
 global_model = None
 global_columns = None
+global_dataset_name = None  # tracks the current dataset name for history
 
 # training thread stuff
 _training_executor = ThreadPoolExecutor(max_workers=1)
 _current_training_future: Future | None = None
 _training_cancel_event = threading.Event()
 _training_lock = threading.Lock()
+
+
+# ── history helpers ──────────────────────────────────────────────────────────
+
+def _session_dir(name: str) -> str:
+    """returns path to this dataset's history folder, creates it if needed"""
+    safe = name.replace("/", "_").replace("\\", "_").strip()
+    d = os.path.join(HISTORY_DIR, safe)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _save_session(
+    dataset_name: str,
+    df: pd.DataFrame,
+    model,
+    columns: list,
+    scores: dict,
+    train_response: dict,
+    eda_payload: dict,
+):
+    """persist the full training session to data/history/<dataset_name>/"""
+    try:
+        d = _session_dir(dataset_name)
+
+        # 1. dataset CSV
+        df.to_csv(os.path.join(d, "dataset.csv"), index=False)
+
+        # 2. best model pickle
+        with open(os.path.join(d, "model.pkl"), "wb") as f:
+            pickle.dump(model, f)
+
+        # 3. columns list pickle (needed for predictions)
+        with open(os.path.join(d, "columns.pkl"), "wb") as f:
+            pickle.dump(columns, f)
+
+        # 4. metadata — all scores + train response fields + timestamp
+        meta = {
+            "dataset_name": dataset_name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "scores": scores,                              # ALL models' metrics
+            "target": train_response.get("target"),
+            "problem_type": train_response.get("problem_type"),
+            "best_model": train_response.get("best_model"),
+            "best_cv_score": train_response.get("best_cv_score"),
+            "column_types": train_response.get("column_types", {}),
+            "redundant_features": train_response.get("redundant_features", []),
+            "feature_columns": columns,           # post-one-hot model columns
+            "original_columns": list(df.columns), # raw CSV columns (for Predictor UI)
+        }
+        with open(os.path.join(d, "metadata.json"), "w") as f:
+            json.dump(meta, f, indent=2)
+
+        # 5. EDA snapshot
+        with open(os.path.join(d, "eda.json"), "w") as f:
+            json.dump(eda_payload, f)
+
+        print(f"✅ Session saved → {d}")
+    except Exception as e:
+        # never crash the main response because of history saving
+        print(f"⚠️  Failed to save history session: {e}")
+
+
+def _load_metadata(name: str) -> dict | None:
+    """loads metadata.json for a session, returns None if missing/corrupt"""
+    path = os.path.join(HISTORY_DIR, name, "metadata.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 
 class Feedback(BaseModel):
@@ -182,13 +257,14 @@ async def get_datasets():
 
 @app.post("/load_dataset")
 async def load_dataset(name: str = Form(...)):
-    global global_df
+    global global_df, global_dataset_name
     path = os.path.join(DATASET_DIR, name)
 
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f"Dataset '{name}' not found.")
 
     global_df = _safe_read_csv(path)
+    global_dataset_name = os.path.splitext(name)[0]
     redundant = _find_redundant_features(global_df)
     return {
         "columns": list(global_df.columns),
@@ -199,20 +275,20 @@ async def load_dataset(name: str = Form(...)):
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    global global_df
+    global global_df, global_dataset_name
 
     ext = os.path.splitext(file.filename or "")[-1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=415, detail=f"Only CSV files are supported. Got: '{ext}'")
 
-    fpath = os.path.join(UPLOAD_DIR, file.filename)
+    # read entirely into memory — never write to disk
     try:
-        with open(fpath, "wb") as buf:
-            shutil.copyfileobj(file.file, buf)
+        contents = await file.read()
+        global_df = pd.read_csv(io.BytesIO(contents))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not save file: {e}")
+        raise HTTPException(status_code=422, detail=f"Could not parse CSV: {e}")
 
-    global_df = _safe_read_csv(fpath)
+    global_dataset_name = os.path.splitext(file.filename)[0]
     redundant = _find_redundant_features(global_df)
     return {
         "columns": list(global_df.columns),
@@ -297,7 +373,7 @@ async def train(request: Request, target: str):
         else:
             col_types[c] = {"type": "numeric"}
 
-    return {
+    train_response = {
         "scores": scores,
         "target": target,
         "problem_type": meta.get("problem_type"),
@@ -307,13 +383,35 @@ async def train(request: Request, target: str):
         "redundant_features": redundant,
     }
 
+    # ── persist session to history asynchronously ─────────────────────
+    # compute eda now (same logic as /eda endpoint) so we cache it
+    try:
+        eda_payload = _compute_eda_payload()
+    except Exception as e:
+        print(f"⚠️  EDA snapshot failed: {e}")
+        eda_payload = {}
+
+    dataset_name = global_dataset_name or "dataset"
+    loop.run_in_executor(
+        None,
+        _save_session,
+        dataset_name,
+        global_df.copy(),
+        model,
+        columns,
+        scores,
+        train_response,
+        eda_payload,
+    )
+    # ──────────────────────────────────────────────────────────────────
+
+    return train_response
+
 
 # --- eda stuff ---
 
-@app.get("/eda")
-async def eda():
-    _require_dataset()
-
+def _compute_eda_payload() -> dict:
+    """shared EDA computation used by both /eda endpoint and history snapshot"""
     meta = getattr(global_model, "_automl_meta", {}) if global_model else {}
     redundant = meta.get("redundant_features") or _find_redundant_features(global_df)
     display_df = global_df.drop(columns=redundant, errors="ignore")
@@ -470,7 +568,14 @@ async def eda():
     }
 
 
+@app.get("/eda")
+async def eda():
+    _require_dataset()
+    return _compute_eda_payload()
+
+
 # --- model info ---
+
 
 @app.get("/model_info")
 async def model_info():
@@ -536,17 +641,98 @@ async def predict_dataset(file: UploadFile = File(...)):
     )
 
 
+# --- history ---
+
+@app.get("/history")
+async def list_history():
+    """list all saved training sessions"""
+    sessions = []
+    if not os.path.isdir(HISTORY_DIR):
+        return {"sessions": []}
+    for name in sorted(os.listdir(HISTORY_DIR)):
+        meta = _load_metadata(name)
+        if meta is None:
+            continue
+        sessions.append({
+            "name": name,
+            "dataset_name": meta.get("dataset_name", name),
+            "timestamp": meta.get("timestamp"),
+            "best_model": meta.get("best_model"),
+            "best_cv_score": meta.get("best_cv_score"),
+            "problem_type": meta.get("problem_type"),
+            "target": meta.get("target"),
+        })
+    # most recent first
+    sessions.sort(key=lambda s: s.get("timestamp", ""), reverse=True)
+    return {"sessions": sessions}
+
+
+@app.post("/history/{name}/load")
+async def load_history_session(name: str):
+    """restore a saved session into global state (no re-training)"""
+    global global_df, global_model, global_columns, global_dataset_name
+
+    d = os.path.join(HISTORY_DIR, name)
+    if not os.path.isdir(d):
+        raise HTTPException(status_code=404, detail=f"History session '{name}' not found.")
+
+    meta = _load_metadata(name)
+    if meta is None:
+        raise HTTPException(status_code=500, detail="Session metadata is missing or corrupt.")
+
+    # load dataset
+    ds_path = os.path.join(d, "dataset.csv")
+    if not os.path.exists(ds_path):
+        raise HTTPException(status_code=500, detail="Session dataset file is missing.")
+    global_df = _safe_read_csv(ds_path)
+
+    # load model
+    model_path = os.path.join(d, "model.pkl")
+    if not os.path.exists(model_path):
+        raise HTTPException(status_code=500, detail="Session model file is missing.")
+    with open(model_path, "rb") as f:
+        global_model = pickle.load(f)
+
+    # load columns
+    col_path = os.path.join(d, "columns.pkl")
+    if os.path.exists(col_path):
+        with open(col_path, "rb") as f:
+            global_columns = pickle.load(f)
+    else:
+        global_columns = meta.get("feature_columns", meta.get("columns", []))
+
+    global_dataset_name = meta.get("dataset_name", name)
+
+    # original_columns = raw CSV column names (what Predictor/Upload pages use)
+    # feature_columns  = post-one-hot model input columns (used only for prediction)
+    original_columns = meta.get("original_columns", list(global_df.columns))
+
+    return {
+        "scores": meta.get("scores", {}),
+        "target": meta.get("target"),
+        "problem_type": meta.get("problem_type"),
+        "best_model": meta.get("best_model"),
+        "best_cv_score": meta.get("best_cv_score"),
+        "column_types": meta.get("column_types", {}),
+        "redundant_features": meta.get("redundant_features", []),
+        "original_columns": original_columns,   # for automl_columns in localStorage
+        "feature_columns": global_columns,       # model columns (not used by UI directly)
+        "dataset_name": global_dataset_name,
+    }
+
+
 # --- reset everything ---
 
 @app.post("/reset")
 async def reset():
-    global global_df, global_model, global_columns
+    global global_df, global_model, global_columns, global_dataset_name
 
     _cancel_current_training()
 
     global_df = None
     global_model = None
     global_columns = None
+    global_dataset_name = None
 
     return {"message": "State reset successful"}
 

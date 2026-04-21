@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { label: "Results",   path: "/results",   step: "02" },
   { label: "EDA",       path: "/eda",       step: "03" },
   { label: "Predictor", path: "/predictor", step: "04" },
+  { label: "History",   path: "/history",   step: "05" },
 ];
 
 export default function Layout({ children }) {

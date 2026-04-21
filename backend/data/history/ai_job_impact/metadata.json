@@ -1,0 +1,189 @@
+{
+  "dataset_name": "ai_job_impact",
+  "timestamp": "2026-04-21T15:19:46.833067+00:00",
+  "scores": {
+    "LinearRegression": {
+      "cv_mean_r2": 0.9823,
+      "cv_std": 0.001,
+      "test_r2": 0.9843,
+      "test_mae": 1.1504
+    },
+    "RandomForestRegressor": {
+      "cv_mean_r2": 0.9808,
+      "cv_std": 0.0013,
+      "test_r2": 0.983,
+      "test_mae": 1.1665
+    },
+    "GradientBoostingRegressor": {
+      "cv_mean_r2": 0.9824,
+      "cv_std": 0.0009,
+      "test_r2": 0.984,
+      "test_mae": 1.1245
+    },
+    "ExtraTreesRegressor": {
+      "cv_mean_r2": 0.9756,
+      "cv_std": 0.0015,
+      "test_r2": 0.9786,
+      "test_mae": 1.2689
+    },
+    "HistGradientBoostingRegressor": {
+      "cv_mean_r2": 0.9799,
+      "cv_std": 0.0013,
+      "test_r2": 0.9831,
+      "test_mae": 1.1499
+    },
+    "KNeighborsRegressor": {
+      "cv_mean_r2": -0.2227,
+      "cv_std": 0.0677,
+      "test_r2": -0.1629,
+      "test_mae": 9.76
+    },
+    "AdaBoostRegressor": {
+      "cv_mean_r2": 0.982,
+      "cv_std": 0.0007,
+      "test_r2": 0.9839,
+      "test_mae": 1.1707
+    }
+  },
+  "target": "Years_Experience",
+  "problem_type": "regression",
+  "best_model": "GradientBoostingRegressor",
+  "best_cv_score": 0.9824,
+  "column_types": {
+    "Age": {
+      "type": "numeric"
+    },
+    "Gender": {
+      "type": "categorical",
+      "values": [
+        "Female",
+        "Male",
+        "Other"
+      ]
+    },
+    "Education_Level": {
+      "type": "categorical",
+      "values": [
+        "Bachelor",
+        "High School",
+        "Master",
+        "PhD"
+      ]
+    },
+    "Industry": {
+      "type": "categorical",
+      "values": [
+        "Marketing",
+        "Manufacturing",
+        "IT",
+        "Education",
+        "Healthcare",
+        "Finance",
+        "Retail"
+      ]
+    },
+    "AI_Adoption_Level": {
+      "type": "categorical",
+      "values": [
+        "High",
+        "Low",
+        "Medium"
+      ]
+    },
+    "Automation_Risk": {
+      "type": "categorical",
+      "values": [
+        "High",
+        "Low",
+        "Medium"
+      ]
+    },
+    "Upskilling_Required": {
+      "type": "categorical",
+      "values": [
+        "Yes",
+        "No"
+      ]
+    },
+    "Salary_Before_AI": {
+      "type": "numeric"
+    },
+    "Salary_After_AI": {
+      "type": "numeric"
+    },
+    "Job_Status": {
+      "type": "categorical",
+      "values": [
+        "Replaced",
+        "Unchanged",
+        "Modified"
+      ]
+    },
+    "Work_Hours_Per_Week": {
+      "type": "numeric"
+    },
+    "Remote_Work": {
+      "type": "categorical",
+      "values": [
+        "No",
+        "Yes"
+      ]
+    },
+    "Job_Satisfaction": {
+      "type": "numeric"
+    },
+    "Productivity_Change_%": {
+      "type": "numeric"
+    }
+  },
+  "redundant_features": [
+    "Employee_ID",
+    "Job_Role"
+  ],
+  "feature_columns": [
+    "Age",
+    "Salary_Before_AI",
+    "Salary_After_AI",
+    "Work_Hours_Per_Week",
+    "Job_Satisfaction",
+    "Productivity_Change_%",
+    "Gender_Male",
+    "Gender_Other",
+    "Education_Level_High School",
+    "Education_Level_Master",
+    "Education_Level_PhD",
+    "Industry_Finance",
+    "Industry_Healthcare",
+    "Industry_IT",
+    "Industry_Manufacturing",
+    "Industry_Marketing",
+    "Industry_Retail",
+    "AI_Adoption_Level_Low",
+    "AI_Adoption_Level_Medium",
+    "Automation_Risk_Low",
+    "Automation_Risk_Medium",
+    "Upskilling_Required_Yes",
+    "Job_Status_Replaced",
+    "Job_Status_Unchanged",
+    "Remote_Work_Yes"
+  ],
+  "original_columns": [
+    "Employee_ID",
+    "Age",
+    "Gender",
+    "Education_Level",
+    "Industry",
+    "Job_Role",
+    "Years_Experience",
+    "AI_Adoption_Level",
+    "Automation_Risk",
+    "Upskilling_Required",
+    "Salary_Before_AI",
+    "Salary_After_AI",
+    "Job_Status",
+    "Work_Hours_Per_Week",
+    "Remote_Work",
+    "Job_Satisfaction",
+    "Productivity_Change_%"
+  ]
+}
