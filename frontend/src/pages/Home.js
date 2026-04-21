@@ -9,42 +9,36 @@ export default function Home() {
   // each card on the homepage
   const features = [
     {
-      icon: "📤",
-      title: "Upload & Train",
+      icon: "⚙️",
+      title: "Automated ML",
       description:
-        "Upload your CSV dataset or select from sample datasets. Choose a target column and let AutoML train the best model automatically.",
+        "Upload your data and select a target. AutoML evaluates multiple algorithms to choose and optimize the best performer for your task.",
       action: () => navigate("/upload"),
-      buttonText: "Get Started",
+      buttonText: "Training Studio",
     },
     {
       icon: "📊",
-      title: "Exploratory Data Analysis",
+      title: "Interactive EDA",
       description:
-        "Visualize your data with statistical summaries, correlation matrices, histograms, and outlier detection to understand your dataset better.",
+        "Deep-dive into dataset health with automated ML readiness scores, outlier detection, and correlation matrices to understand data patterns.",
       action: () => navigate("/eda"),
-      buttonText: "Explore Data",
-      disabled: true,
-      disabledReason: "(requires trained model)",
+      buttonText: "Data Insights",
     },
     {
       icon: "📈",
-      title: "Model Results",
+      title: "Performance Metrics",
       description:
-        "View detailed model performance metrics, feature importance scores, and cross-validation results from your trained model.",
+        "View champion model rankings, detailed test metrics, and feature importance mappings in a unified analytics dashboard.",
       action: () => navigate("/results"),
-      buttonText: "View Results",
-      disabled: true,
-      disabledReason: "(requires trained model)",
+      buttonText: "Model Registry",
     },
     {
       icon: "🔮",
-      title: "Make Predictions",
+      title: "Live Predictor",
       description:
-        "Use your trained model to make predictions on new data. Input feature values and get instant predictions with confidence.",
+        "Deploy your model instantly. Input values manually or upload secondary CSVs to get real-time predictions with confidence scores.",
       action: () => navigate("/predictor"),
-      buttonText: "Predict",
-      disabled: true,
-      disabledReason: "(requires trained model)",
+      buttonText: "Test Inference",
     },
   ];
 
