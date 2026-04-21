@@ -3,10 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import pandas as pd
 import numpy as np
-import shutil
-import os
-import io
-import asyncio
+import shutil, os, io, asyncio
 from concurrent.futures import ThreadPoolExecutor, Future
 import threading
 import requests
@@ -19,7 +16,7 @@ from model import train_model, predict_model, predict_dataset as predict_dataset
 
 app = FastAPI(title="AutoML API", version="2.0.0")
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
+# allow any origin for now (dev mode)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,7 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# where uploaded files go
 UPLOAD_DIR = "data"
 DATASET_DIR = "data/datasets"
 ALLOWED_EXTENSIONS = {".csv"}
@@ -36,12 +33,12 @@ ALLOWED_EXTENSIONS = {".csv"}
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(DATASET_DIR, exist_ok=True)
 
-# ── State ─────────────────────────────────────────────────────────────────────
+# global state - keeps track of whats loaded right now
 global_df = None
 global_model = None
 global_columns = None
 
-# ── Training cancellation state ───────────────────────────────────────────────
+# training thread stuff
 _training_executor = ThreadPoolExecutor(max_workers=1)
 _current_training_future: Future | None = None
 _training_cancel_event = threading.Event()
@@ -55,6 +52,7 @@ class Feedback(BaseModel):
 
 
 def send_feedback_email(fb: Feedback):
+    """tries to send the feedback via resend api, falls back to console print"""
     target_email = "automlquery@gmail.com"
     api_key = os.getenv("RESEND_API_KEY", "").strip()
 
@@ -66,9 +64,9 @@ def send_feedback_email(fb: Feedback):
     try:
         print(f"📧 Attempting to send email via Resend API...")
         
-        # Note: Resend's free tier requires sending from 'onboarding@resend.dev' 
-        # until you verify a custom domain.
-        response = requests.post(
+        # resend free tier only lets you send from onboarding@resend.dev
+        # until you verify your own domain
+        resp = requests.post(
             "https://api.resend.com/emails",
             headers={
                 "Authorization": f"Bearer {api_key}",
@@ -82,23 +80,22 @@ def send_feedback_email(fb: Feedback):
             }
         )
         
-        if response.status_code in [200, 201]:
-            print("✅ Email sent successfully via Resend!")
+        if resp.status_code in [200, 201]:
+            print(" Email sent successfully via Resend!")
             return True
         else:
-            print(f"❌ Resend API Error: {response.status_code} - {response.text}")
+            print(f" Resend API Error: {resp.status_code} - {resp.text}")
             return False
             
     except Exception as e:
-        print(f"❌ Failed to send email via Resend: {type(e).__name__} - {e}")
+        print(f" Failed to send email via Resend: {type(e).__name__} - {e}")
         return False
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# quick checks so we dont crash randomly
 def _require_dataset():
     if global_df is None:
         raise HTTPException(status_code=400, detail="No dataset loaded. Upload or select one first.")
-
 
 def _require_model():
     if global_model is None:
@@ -106,6 +103,7 @@ def _require_model():
 
 
 def _safe_read_csv(path: str) -> pd.DataFrame:
+    """just wraps pd.read_csv with a nicer error"""
     try:
         return pd.read_csv(path)
     except Exception as e:
@@ -113,65 +111,66 @@ def _safe_read_csv(path: str) -> pd.DataFrame:
 
 
 def _cancel_current_training():
-    """Signal any in-progress training to stop and wait briefly."""
+    """tells any running training to stop"""
     global _current_training_future
     with _training_lock:
         _training_cancel_event.set()
-        future = _current_training_future
-    if future and not future.done():
-        # Give it up to 2 seconds to notice the cancel signal
-        future.cancel()
+        fut = _current_training_future
+    if fut and not fut.done():
+        fut.cancel()
 
 
-def _compute_outliers(df: pd.DataFrame, numeric_cols: list) -> dict:
-    """IQR-based outlier count per numeric column."""
+def _compute_outliers(df: pd.DataFrame, num_cols: list) -> dict:
+    """counts outliers per column using IQR method"""
     outliers = {}
-    for col in numeric_cols:
-        series = df[col].dropna()
-        if series.empty:
-            outliers[col] = 0
+    for c in num_cols:
+        s = df[c].dropna()
+        if s.empty:
+            outliers[c] = 0
             continue
-        Q1 = series.quantile(0.25)
-        Q3 = series.quantile(0.75)
-        IQR = Q3 - Q1
-        count = int(((series < Q1 - 1.5 * IQR) | (series > Q3 + 1.5 * IQR)).sum())
-        outliers[col] = count
+        q1 = s.quantile(0.25)
+        q3 = s.quantile(0.75)
+        iqr = q3 - q1
+        cnt = int(((s < q1 - 1.5 * iqr) | (s > q3 + 1.5 * iqr)).sum())
+        outliers[c] = cnt
     return outliers
 
 
-def _compute_scatter_data(df: pd.DataFrame, corr: dict, numeric_cols: list, n_pairs: int = 6, sample_size: int = 200) -> dict:
+def _compute_scatter_data(df: pd.DataFrame, corr: dict, num_cols: list, n_pairs: int = 6, sample_size: int = 200) -> dict:
+    """grabs the top correlated pairs and returns scatter plot data for them"""
     pairs = []
     seen = set()
-    cols = list(numeric_cols)
+    cols = list(num_cols)
     for i in range(len(cols)):
         for j in range(i + 1, len(cols)):
-            col_a, col_b = cols[i], cols[j]
-            key = f"{col_a}__{col_b}"
-            if key in seen:
+            a, b = cols[i], cols[j]
+            k = f"{a}__{b}"
+            if k in seen:
                 continue
-            seen.add(key)
-            val = corr.get(col_a, {}).get(col_b, None)
+            seen.add(k)
+            val = corr.get(a, {}).get(b, None)
             if val is not None and not np.isnan(val):
-                pairs.append((col_a, col_b, abs(val)))
+                pairs.append((a, b, abs(val)))
 
     pairs.sort(key=lambda x: x[2], reverse=True)
-    top_pairs = pairs[:n_pairs]
+    top = pairs[:n_pairs]
 
-    scatter_data = {}
-    for col_a, col_b, _ in top_pairs:
-        key = f"{col_a}__{col_b}"
-        subset = df[[col_a, col_b]].dropna()
+    scatter = {}
+    for a, b, _ in top:
+        k = f"{a}__{b}"
+        subset = df[[a, b]].dropna()
         if len(subset) > sample_size:
             subset = subset.sample(sample_size, random_state=42)
-        scatter_data[key] = [
-            {"x": round(float(row[col_a]), 6), "y": round(float(row[col_b]), 6)}
+        scatter[k] = [
+            {"x": round(float(row[a]), 6), "y": round(float(row[b]), 6)}
             for _, row in subset.iterrows()
         ]
 
-    return scatter_data
+    return scatter
 
 
-# ── Datasets ──────────────────────────────────────────────────────────────────
+# --- dataset endpoints ---
+
 @app.get("/datasets")
 async def get_datasets():
     try:
@@ -206,14 +205,14 @@ async def upload_file(file: UploadFile = File(...)):
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=415, detail=f"Only CSV files are supported. Got: '{ext}'")
 
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    fpath = os.path.join(UPLOAD_DIR, file.filename)
     try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        with open(fpath, "wb") as buf:
+            shutil.copyfileobj(file.file, buf)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not save file: {e}")
 
-    global_df = _safe_read_csv(file_path)
+    global_df = _safe_read_csv(fpath)
     redundant = _find_redundant_features(global_df)
     return {
         "columns": list(global_df.columns),
@@ -222,54 +221,51 @@ async def upload_file(file: UploadFile = File(...)):
     }
 
 
-# ── Train ─────────────────────────────────────────────────────────────────────
+# --- training ---
+
 @app.post("/train")
 async def train(request: Request, target: str):
     global global_model, global_columns, _current_training_future
 
     _require_dataset()
 
-    col_map = {col.lower(): col for col in global_df.columns}
-    target_lower = target.strip().lower()
-    if target_lower not in col_map:
+    # case insensitive column matching
+    col_map = {c.lower(): c for c in global_df.columns}
+    tgt_lower = target.strip().lower()
+    if tgt_lower not in col_map:
         raise HTTPException(
             status_code=422,
             detail=f"Target column '{target}' not found. Available: {', '.join(global_df.columns)}"
         )
 
-    target = col_map[target_lower]
+    target = col_map[tgt_lower]
     if global_df[target].isnull().any():
         raise HTTPException(status_code=422, detail="Target column contains missing values.")
 
-    # Cancel any previous training job
+    # kill previous training if its still going
     _cancel_current_training()
-
-    # Reset cancel event for new training run
     _training_cancel_event.clear()
 
     loop = asyncio.get_event_loop()
 
-    def run_training():
+    def do_train():
         return train_model(global_df, target, cancel_event=_training_cancel_event)
 
-    # Submit training to thread pool
+    # submit to thread pool
     with _training_lock:
-        future = _training_executor.submit(run_training)
+        future = _training_executor.submit(do_train)
         _current_training_future = future
 
     try:
-        # Poll: run training while checking for client disconnect
+        # keep checking if client disconnected while training runs
         while not future.done():
-            # Check if client disconnected
             if await request.is_disconnected():
                 print("⚠️  Client disconnected — cancelling training.")
                 _training_cancel_event.set()
                 future.cancel()
                 raise HTTPException(status_code=499, detail="Client disconnected. Training cancelled.")
+            await asyncio.sleep(0.5)
 
-            await asyncio.sleep(0.5)  # Check every 500ms
-
-        # Retrieve result (raises if training raised)
         model, scores, columns = future.result()
 
     except HTTPException:
@@ -287,21 +283,19 @@ async def train(request: Request, target: str):
 
     meta = getattr(model, "_automl_meta", {})
     redundant = meta.get("redundant_features", [])
-    column_types = {}
+    col_types = {}
 
     input_df = global_df.drop(columns=[target] + redundant, errors="ignore")
-    numeric_cols, categorical_cols = _infer_column_types(input_df)
+    num_cols, cat_cols = _infer_column_types(input_df)
 
-    for col in input_df.columns:
-        if col in categorical_cols:
-            column_types[col] = {
+    for c in input_df.columns:
+        if c in cat_cols:
+            col_types[c] = {
                 "type": "categorical",
-                "values": global_df[col].dropna().unique().tolist()
+                "values": global_df[c].dropna().unique().tolist()
             }
         else:
-            column_types[col] = {
-                "type": "numeric"
-            }
+            col_types[c] = {"type": "numeric"}
 
     return {
         "scores": scores,
@@ -309,12 +303,13 @@ async def train(request: Request, target: str):
         "problem_type": meta.get("problem_type"),
         "best_model": meta.get("best_model_name"),
         "best_cv_score": meta.get("best_cv_score"),
-        "column_types": column_types,
+        "column_types": col_types,
         "redundant_features": redundant,
     }
 
 
-# ── EDA ───────────────────────────────────────────────────────────────────────
+# --- eda stuff ---
+
 @app.get("/eda")
 async def eda():
     _require_dataset()
@@ -324,122 +319,127 @@ async def eda():
     display_df = global_df.drop(columns=redundant, errors="ignore")
 
     numeric_df = display_df.select_dtypes(include=["number"])
-    numeric_cols = list(numeric_df.columns)
+    num_cols = list(numeric_df.columns)
 
     summary = display_df.describe(include="all").replace({np.nan: None}).to_dict()
     corr = numeric_df.corr().replace({np.nan: 0}).to_dict() if not numeric_df.empty else {}
 
+    # build histogram data
     histograms = {}
-    for col in numeric_cols:
+    for col in num_cols:
         counts, bins = np.histogram(display_df[col].dropna(), bins=6)
         histograms[col] = [
             {"bin": f"{round(bins[i], 2)}–{round(bins[i+1], 2)}", "count": int(counts[i])}
             for i in range(len(counts))
         ]
 
+    # box plot stats
     box_plots = {}
-    for col in numeric_cols:
-        series = display_df[col].dropna().astype(float)
-        if series.empty:
+    for col in num_cols:
+        s = display_df[col].dropna().astype(float)
+        if s.empty:
             continue
-        q1 = float(series.quantile(0.25))
-        q2 = float(series.quantile(0.5))
-        q3 = float(series.quantile(0.75))
+        q1 = float(s.quantile(0.25))
+        q2 = float(s.quantile(0.5))
+        q3 = float(s.quantile(0.75))
         iqr = q3 - q1
-        lower_whisker = float(series[series >= q1 - 1.5 * iqr].min())
-        upper_whisker = float(series[series <= q3 + 1.5 * iqr].max())
-        outlier_values = series[(series < lower_whisker) | (series > upper_whisker)].tolist()
+        lo = float(s[s >= q1 - 1.5 * iqr].min())
+        hi = float(s[s <= q3 + 1.5 * iqr].max())
+        outlier_vals = s[(s < lo) | (s > hi)].tolist()
         box_plots[col] = {
-            "min": float(series.min()),
+            "min": float(s.min()),
             "q1": q1,
             "median": q2,
             "q3": q3,
-            "max": float(series.max()),
+            "max": float(s.max()),
             "iqr": iqr,
-            "lower_whisker": lower_whisker,
-            "upper_whisker": upper_whisker,
-            "outliers": [float(v) for v in outlier_values[:20]],
-            "outlier_count": int(len(outlier_values)),
+            "lower_whisker": lo,
+            "upper_whisker": hi,
+            "outliers": [float(v) for v in outlier_vals[:20]],
+            "outlier_count": int(len(outlier_vals)),
         }
 
+    # categorical value counts
     categorical = {}
     for col in display_df.select_dtypes(include=["object", "category"]).columns:
-        values = display_df[col].fillna("<missing>").astype(str)
-        categorical[col] = values.value_counts().head(10).to_dict()
+        vals = display_df[col].fillna("<missing>").astype(str)
+        categorical[col] = vals.value_counts().head(10).to_dict()
 
     missing = display_df.isnull().sum().to_dict()
 
+    # feature importance from the model if we have one
     importance = {}
     if global_model is not None:
-        estimator = global_model
+        est = global_model
         if hasattr(global_model, "named_steps"):
-            estimator = global_model.named_steps.get("clf") or global_model.named_steps.get("reg")
-        if estimator is not None:
-            if hasattr(estimator, "feature_importances_"):
-                importance = dict(zip(global_columns, estimator.feature_importances_.tolist()))
-            elif hasattr(estimator, "coef_"):
-                coefs = estimator.coef_
+            est = global_model.named_steps.get("clf") or global_model.named_steps.get("reg")
+        if est is not None:
+            if hasattr(est, "feature_importances_"):
+                importance = dict(zip(global_columns, est.feature_importances_.tolist()))
+            elif hasattr(est, "coef_"):
+                coefs = est.coef_
                 if coefs.ndim == 2:
                     coefs = np.mean(np.abs(coefs), axis=0)
                 else:
                     coefs = np.abs(coefs)
                 importance = dict(zip(global_columns, coefs.tolist()))
 
-    duplicate_rows = int(display_df.duplicated().sum())
-    outliers = _compute_outliers(display_df, numeric_cols)
-    scatter_data = _compute_scatter_data(display_df, corr, numeric_cols)
+    dup_rows = int(display_df.duplicated().sum())
+    outliers = _compute_outliers(display_df, num_cols)
+    scatter = _compute_scatter_data(display_df, corr, num_cols)
 
-    target_column = meta.get("target")
-    target_distribution = {}
-    categorical_target_distribution = {}
+    target_col = meta.get("target")
+    target_dist = {}
+    cat_target_dist = {}
     if (
-        target_column
-        and target_column in global_df.columns
+        target_col
+        and target_col in global_df.columns
         and meta.get("problem_type") == "classification"
     ):
-        target_series = global_df[target_column].dropna().astype(str)
-        target_distribution = target_series.value_counts().to_dict()
+        tgt_series = global_df[target_col].dropna().astype(str)
+        target_dist = tgt_series.value_counts().to_dict()
 
-        cat_cols = [
-            col
-            for col in display_df.select_dtypes(include=["object"]).columns
-            if col != target_column
+        # figure out which categorical cols matter most
+        cat_cols_list = [
+            c
+            for c in display_df.select_dtypes(include=["object"]).columns
+            if c != target_col
         ]
-        top_categorical = []
+        top_cats = []
         if importance:
             cat_scores = {}
-            for feature, score in importance.items():
-                if feature == target_column:
+            for feat, score in importance.items():
+                if feat == target_col:
                     continue
-                normalized = feature
-                for col in cat_cols:
-                    if feature == col or feature.startswith(f"{col}_") or feature.startswith(f"{col}__"):
-                        normalized = col
+                normalized = feat
+                for c in cat_cols_list:
+                    if feat == c or feat.startswith(f"{c}_") or feat.startswith(f"{c}__"):
+                        normalized = c
                         break
-                if normalized in cat_cols:
+                if normalized in cat_cols_list:
                     cat_scores[normalized] = max(cat_scores.get(normalized, 0), score)
-            top_categorical = sorted(cat_scores, key=lambda c: cat_scores[c], reverse=True)[:3]
-        if not top_categorical:
-            top_categorical = cat_cols[:3]
+            top_cats = sorted(cat_scores, key=lambda c: cat_scores[c], reverse=True)[:3]
+        if not top_cats:
+            top_cats = cat_cols_list[:3]
 
-        for col in top_categorical:
+        for col in top_cats:
             values = global_df[col].astype(str).fillna("<missing>")
             top_values = values.value_counts().nlargest(5).index.tolist()
             safe_col = global_df[col].astype(str).fillna("<missing>")
-            safe_target = global_df[target_column].astype(str).fillna("<missing>")
+            safe_tgt = global_df[target_col].astype(str).fillna("<missing>")
             subset = global_df[safe_col.isin(top_values)].copy()
             subset[col] = safe_col
-            subset[target_column] = safe_target
-            grouped = subset.groupby([col, target_column]).size().unstack(fill_value=0)
-            categorical_target_distribution[col] = {
+            subset[target_col] = safe_tgt
+            grouped = subset.groupby([col, target_col]).size().unstack(fill_value=0)
+            cat_target_dist[col] = {
                 "categories": top_values,
                 "target_labels": [str(v) for v in grouped.columns.tolist()],
                 "data": [
                     {
-                        "category": str(category),
-                        **{str(label): int(grouped.get(label, {}).get(category, 0)) for label in grouped.columns},
+                        "category": str(cat),
+                        **{str(lbl): int(grouped.get(lbl, {}).get(cat, 0)) for lbl in grouped.columns},
                     }
-                    for category in top_values
+                    for cat in top_values
                 ],
             }
 
@@ -454,23 +454,24 @@ async def eda():
         "importance": importance,
         "num_rows": len(display_df),
         "num_columns": len(display_df.columns),
-        "numeric_columns": meta.get("numeric_columns", numeric_cols),
+        "numeric_columns": meta.get("numeric_columns", num_cols),
         "categorical_columns": meta.get("categorical_columns", list(display_df.select_dtypes("object").columns)),
         "missing_total": int(display_df.isnull().sum().sum()),
         "has_model": global_model is not None,
-        "duplicate_rows": duplicate_rows,
+        "duplicate_rows": dup_rows,
         "outliers": outliers,
-        "scatter_data": scatter_data,
+        "scatter_data": scatter,
         "box_plots": box_plots,
         "redundant_features": redundant,
-        "target_column": target_column,
+        "target_column": target_col,
         "target_type": meta.get("problem_type"),
-        "target_distribution": target_distribution,
-        "categorical_target_distribution": categorical_target_distribution,
+        "target_distribution": target_dist,
+        "categorical_target_distribution": cat_target_dist,
     }
 
 
-# ── Model info ────────────────────────────────────────────────────────────────
+# --- model info ---
+
 @app.get("/model_info")
 async def model_info():
     _require_model()
@@ -486,7 +487,8 @@ async def model_info():
     }
 
 
-# ── Predict ───────────────────────────────────────────────────────────────────
+# --- prediction ---
+
 @app.post("/predict")
 async def predict(data: dict):
     _require_model()
@@ -517,12 +519,12 @@ async def predict_dataset(file: UploadFile = File(...)):
         raise HTTPException(status_code=422, detail=f"Could not parse uploaded CSV: {e}")
 
     try:
-        predictions = predict_dataset_model(global_model, dataset, global_columns, global_df)
+        preds = predict_dataset_model(global_model, dataset, global_columns, global_df)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Bulk prediction failed: {e}")
 
     output = dataset.copy()
-    output["prediction"] = predictions
+    output["prediction"] = preds
 
     csv_bytes = output.to_csv(index=False).encode("utf-8")
     return StreamingResponse(
@@ -534,12 +536,12 @@ async def predict_dataset(file: UploadFile = File(...)):
     )
 
 
-# ── Reset ─────────────────────────────────────────────────────────────────────
+# --- reset everything ---
+
 @app.post("/reset")
 async def reset():
     global global_df, global_model, global_columns
 
-    # Cancel any in-progress training
     _cancel_current_training()
 
     global_df = None
@@ -549,7 +551,7 @@ async def reset():
     return {"message": "State reset successful"}
 
 
-
+# --- feedback ---
 
 @app.post("/feedback")
 async def receive_feedback(fb: Feedback):

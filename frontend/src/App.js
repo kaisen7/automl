@@ -7,6 +7,7 @@ import Results from "./pages/Results";
 import EDA from "./pages/EDA";
 import Predictor from "./pages/Predictor";
 
+// main app - just sets up the routes
 function App() {
   return (
     <Router>

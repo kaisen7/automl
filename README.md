@@ -1,10 +1,10 @@
-# 🚀 AutoML Web Platform
+#  AutoML Web Platform
 
 **Precision Machine Learning, Simplified.** AutoML is a comprehensive end-to-end platform designed to bridge the gap between raw data and actionable machine learning models. Upload your data, and let the platform handle the heavy lifting—from automated cleaning and model selection to deep exploratory analysis and real-time inference.
 
 ---
 
-## 🖼️ Application Gallery
+## Application Gallery
 
 <div align="center">
   <img src="screenshots/01_homepage.png" width="400" alt="Home Page">
@@ -17,7 +17,7 @@
 
 ---
 
-## ✨ Key Features
+##  Key Features
 
 ### 1. Automated Model Training
 One-click model selection and optimization. The platform automatically evaluates multiple algorithms (Random Forest, XGBoost, Linear Models, etc.), performs cross-validation, and selects the champion model for your specific dataset.
@@ -40,7 +40,7 @@ A glassmorphic feedback query system integrated with the **Resend API**, ensurin
 
 ---
 
-## 🛠️ Technical Stack
+##  Technical Stack
 
 - **Frontend**: [React.js](https://reactjs.org/) with a custom **Glassmorphism CSS** design system.
 - **Backend**: [FastAPI](https://fastapi.tiangolo.com/) (Python) for high-performance async processing.
@@ -50,7 +50,7 @@ A glassmorphic feedback query system integrated with the **Resend API**, ensurin
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Local Development
 
@@ -84,7 +84,7 @@ RESEND_API_KEY=re_your_api_key
 
 ---
 
-## ☁️ Deployment (Hugging Face)
+##  Deployment (Hugging Face)
 
 This project is optimized for **Hugging Face Spaces**. 
 1. Create a "Blank" Space with the **Docker** or **Static** SDK (depending on your build).
@@ -93,5 +93,5 @@ This project is optimized for **Hugging Face Spaces**.
 
 ---
 
-## 📄 License
+##  License
 Custom Project License - AI-Driven Automated Machine Learning.

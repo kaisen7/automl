@@ -6,8 +6,8 @@ import "./FeedbackForm.css";
 export default function FeedbackForm() {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({ name: "", email: "", query: "" });
-  const [status, setStatus] = useState("idle"); // idle, submitting, success, error
-  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | submitting | success | error
+  const [msg, setMsg] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -16,9 +16,10 @@ export default function FeedbackForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // make sure nothing is blank
     if (!formData.name || !formData.email || !formData.query) {
       setStatus("error");
-      setMessage("Please fill in all fields.");
+      setMsg("Please fill in all fields.");
       return;
     }
 
@@ -26,8 +27,9 @@ export default function FeedbackForm() {
     try {
       await axios.post(`${API}/feedback`, formData);
       setStatus("success");
-      setMessage("Feedback sent! Thank you.");
+      setMsg("Feedback sent! Thank you.");
       setFormData({ name: "", email: "", query: "" });
+      // auto close after a few seconds
       setTimeout(() => {
         setIsOpen(false);
         setStatus("idle");
@@ -35,13 +37,13 @@ export default function FeedbackForm() {
     } catch (err) {
       console.error(err);
       setStatus("error");
-      setMessage("Failed to send feedback. Please try again later.");
+      setMsg("Failed to send feedback. Please try again later.");
     }
   };
 
   return (
     <div className={`feedback-container ${isOpen ? "open" : ""}`}>
-      {/* Floating Toggle Button */}
+      {/* floating button to open/close */}
       <button 
         className="feedback-toggle" 
         onClick={() => setIsOpen(!isOpen)}
@@ -59,7 +61,7 @@ export default function FeedbackForm() {
         )}
       </button>
 
-      {/* Feedback Card */}
+      {/* the actual form card */}
       {isOpen && (
         <div className="feedback-card">
           <div className="feedback-header">
@@ -107,8 +109,8 @@ export default function FeedbackForm() {
               />
             </div>
 
-            {status === "error" && <div className="fb-error">{message}</div>}
-            {status === "success" && <div className="fb-success">{message}</div>}
+            {status === "error" && <div className="fb-error">{msg}</div>}
+            {status === "success" && <div className="fb-success">{msg}</div>}
 
             <button 
               type="submit" 

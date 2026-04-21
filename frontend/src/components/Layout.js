@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import FeedbackForm from "./FeedbackForm";
 import "./Layout.css"
 
-
+// navigation items - each page gets a step number
 const NAV_ITEMS = [
   { label: "Home",      path: "/",          step: "00" },
   { label: "Upload",    path: "/upload",    step: "01" },
@@ -17,10 +17,10 @@ export default function Layout({ children }) {
   const location  = useLocation();
   const [open, setOpen] = useState(false);
 
-  // Close drawer on route change
+  // close the mobile drawer whenever we navigate
   useEffect(() => { setOpen(false); }, [location.pathname]);
 
-  // Close drawer on outside click
+  // click outside to close drawer
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
@@ -39,9 +39,8 @@ export default function Layout({ children }) {
 
   return (
     <>
-
       <nav className="layout-nav">
-        {/* Wordmark and Hamburger */}
+        {/* logo + hamburger */}
         <div className="nav-left">
           <div className="nav-wordmark" onClick={() => go("/")}>
             <div className="nav-logo-box">
@@ -52,7 +51,7 @@ export default function Layout({ children }) {
             <span className="nav-wordmark-text">Auto<span>ML</span></span>
           </div>
 
-          {/* Hamburger */}
+          {/* hamburger for mobile */}
           <button
             className={`nav-hamburger${open ? " open" : ""}`}
             onClick={() => setOpen(v => !v)}
@@ -62,7 +61,7 @@ export default function Layout({ children }) {
           </button>
         </div>
 
-        {/* Desktop links */}
+        {/* desktop nav links */}
         <div className="nav-links">
           {NAV_ITEMS.map(({ label, path, step }) => (
             <div
@@ -78,7 +77,7 @@ export default function Layout({ children }) {
         </div>
       </nav>
 
-      {/* Mobile drawer */}
+      {/* mobile slide-out drawer */}
       <div className={`nav-drawer${open ? " open" : ""}`}>
         {NAV_ITEMS.map(({ label, path, step }) => (
           <div

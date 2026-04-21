@@ -4,9 +4,10 @@ import API from "../api";
 import Layout from "../components/Layout";
 import "./styles/Predictor.css";
 
-function safeParseJSON(value) {
+// safely parse json without crashing
+function tryParseJSON(val) {
   try {
-    return JSON.parse(value);
+    return JSON.parse(val);
   } catch {
     return null;
   }
@@ -25,15 +26,16 @@ export default function Predictor() {
   const [bulkError, setBulkError] = useState("");
   const [singleError, setSingleError] = useState("");
 
-  const parsedColumns = safeParseJSON(rawColumns);
-  const parsedRedundant = safeParseJSON(
+  const parsedCols = tryParseJSON(rawColumns);
+  const parsedRedundant = tryParseJSON(
     localStorage.getItem("automl_redundant_features"),
   );
-  const columns = Array.isArray(parsedColumns) ? parsedColumns : [];
+  const columns = Array.isArray(parsedCols) ? parsedCols : [];
   const redundantFeatures = Array.isArray(parsedRedundant)
     ? parsedRedundant
     : [];
 
+  // cleanup blob url when component unmounts
   useEffect(() => {
     return () => {
       if (downloadUrl) {
@@ -42,16 +44,15 @@ export default function Predictor() {
     };
   }, [downloadUrl]);
 
-  // Create lowercase mapping (JS version of your Python logic)
+  // case-insensitive column name mapping (same logic as backend)
   const colMap = Object.fromEntries(
     columns.map((col) => [col.toLowerCase(), col]),
   );
 
-  const targetLower = target ? target.trim().toLowerCase() : null;
+  const tgtLower = target ? target.trim().toLowerCase() : null;
+  target = tgtLower && colMap[tgtLower];
 
-  target = targetLower && colMap[targetLower];
-
-  // Guard: no session data
+  // if no data in session, show a warning
   if (!rawColumns || !target) {
     return (
       <Layout>
@@ -91,6 +92,7 @@ export default function Predictor() {
     );
   }
 
+  // columns the user needs to fill in (everything except target and redundant)
   const inputCols = columns.filter(
     (col) => col !== target && !redundantFeatures.includes(col),
   );
@@ -99,7 +101,7 @@ export default function Predictor() {
     setInput((prev) => ({
       ...prev,
       [col]:
-        columnTypes[col]?.type === "numeric"
+        colTypes[col]?.type === "numeric"
           ? value === ""
             ? ""
             : Number(value)
@@ -114,6 +116,7 @@ export default function Predictor() {
     setBulkError("");
   };
 
+  // batch prediction - upload csv, get predictions csv back
   const handlePredictDataset = async () => {
     setBulkError("");
     if (!bulkFile) {
@@ -147,11 +150,13 @@ export default function Predictor() {
     }
   };
 
+  // get column type info from localStorage
   const rawTypes = localStorage.getItem("automl_types");
-  const parsedTypes = safeParseJSON(rawTypes);
-  const columnTypes =
+  const parsedTypes = tryParseJSON(rawTypes);
+  const colTypes =
     parsedTypes && typeof parsedTypes === "object" ? parsedTypes : {};
 
+  // single row prediction
   const handlePredict = async () => {
     setSingleError("");
     const missing = inputCols.filter(
@@ -182,7 +187,7 @@ export default function Predictor() {
     <Layout>
       <div className="pred-root">
         <div className="pred-wrap">
-          {/* Header */}
+          {/* header */}
           <div className="page-header">
             <div className="page-eyebrow">AutoML · Inference</div>
             <h1 className="page-title">
@@ -190,7 +195,7 @@ export default function Predictor() {
             </h1>
           </div>
 
-          {/* Target badge */}
+          {/* shows which column we're predicting */}
           <div>
             <div className="target-badge">
               <span className="target-badge-label">Target →</span>
@@ -198,7 +203,7 @@ export default function Predictor() {
             </div>
           </div>
 
-          {/* Batch prediction card */}
+          {/* batch csv prediction */}
           <div className="pred-card">
             <div className="card-bar gold" />
             <div className="card-body">
@@ -263,7 +268,7 @@ export default function Predictor() {
             </div>
           </div>
 
-          {/* Input card */}
+          {/* single row prediction form */}
           <div className="pred-card">
             <div className="card-bar" />
             <div className="card-body">
@@ -295,14 +300,14 @@ export default function Predictor() {
                       {col}
                     </div>
 
-                    {columnTypes[col]?.type === "categorical" ? (
+                    {colTypes[col]?.type === "categorical" ? (
                       <select
                         className="styled-input"
                         value={input[col] ?? ""}
                         onChange={(e) => handleChange(col, e.target.value)}
                       >
                         <option value="">Select</option>
-                        {columnTypes[col].values.map((v) => (
+                        {colTypes[col].values.map((v) => (
                           <option key={v} value={v}>
                             {v}
                           </option>
@@ -332,7 +337,7 @@ export default function Predictor() {
             </div>
           </div>
 
-          {/* Result */}
+          {/* prediction output */}
           {prediction !== null && (
             <div className="result-card">
               <div className="result-bar" />

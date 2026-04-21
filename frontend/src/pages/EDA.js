@@ -32,7 +32,7 @@ import {
   ZAxis,
 } from "recharts";
 
-// ── Tooltip ───────────────────────────────────────────────────────────────────
+// custom tooltip for all the charts
 const ChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -61,7 +61,7 @@ const ChartTooltip = ({ active, payload, label }) => {
   );
 };
 
-// ── Correlation colour ─────────────────────────────────────────────────────────
+// color for correlation cells (green=positive, red=negative)
 const corrColor = (val) => {
   const v = Math.max(-1, Math.min(1, val));
   if (v > 0) return `rgba(99,210,179,${(v * 0.75 + 0.1).toFixed(2)})`;
@@ -70,7 +70,7 @@ const corrColor = (val) => {
   return "transparent";
 };
 
-// ── Score bar ─────────────────────────────────────────────────────────────────
+// small percentage bar used in model score cards
 const ScoreBar = ({ value, color = ACCENT }) => {
   const pct = Math.min(Math.max(value * 100, 0), 100).toFixed(1);
   return (
@@ -109,7 +109,7 @@ const ScoreBar = ({ value, color = ACCENT }) => {
   );
 };
 
-// ── CSV Export helper ─────────────────────────────────────────────────────────
+// downloads summary stats as csv file
 function exportSummaryCSV(summary, columns) {
   const STAT_KEYS = ["count", "mean", "std", "min", "25%", "50%", "75%", "max"];
   const header = ["column", ...STAT_KEYS].join(",");
@@ -136,7 +136,7 @@ function exportSummaryCSV(summary, columns) {
   URL.revokeObjectURL(url);
 }
 
-// ── ML Readiness helper ───────────────────────────────────────────────────────
+// checks dataset health and flags issues for ML training
 function buildMLReadiness(data) {
   const issues = [];
   const warnings = [];
@@ -330,7 +330,7 @@ function ExpandOverlay({ title, children, onClose }) {
   );
 }
 
-// ── Model scores panel ─────────────────────────────────────────────────────────
+// shows all model scores side by side
 function ModelScores({ scores, bestModel }) {
   if (!scores || Object.keys(scores).length === 0) return null;
   const isCls = Object.values(scores).some(
@@ -437,7 +437,7 @@ function ModelScores({ scores, bestModel }) {
   );
 }
 
-// ── Outlier Panel ─────────────────────────────────────────────────────────────
+// outlier detection results with bar charts
 function OutlierPanel({ outliers, numRows }) {
   if (!outliers || Object.keys(outliers).length === 0) return null;
   const maxCount = Math.max(...Object.values(outliers), 1);
@@ -894,8 +894,8 @@ function CategoricalTargetPanel({ targetColumn, distributions, onCardExpand }) {
                       {info.target_labels.map((label, labelIndex) => (
                         <Bar
                           key={label}
-                          isAnimationActive={true} // Ensure this is true
-                          animationBegin={200} // Slight delay to ensure layout is ready
+                          isAnimationActive={true}
+                          animationBegin={200}
                           animationDuration={1200}
                           animationEasing="ease-in-out"
                           dataKey={label}
@@ -954,8 +954,8 @@ function CategoricalTargetPanel({ targetColumn, distributions, onCardExpand }) {
                   {info.target_labels.map((label, labelIndex) => (
                     <Bar
                       key={label}
-                      isAnimationActive={true} // Ensure this is true
-                      animationBegin={200} // Slight delay to ensure layout is ready
+                      isAnimationActive={true}
+                      animationBegin={200}
                       animationDuration={1200}
                       animationEasing="ease-in-out"
                       dataKey={label}
@@ -974,7 +974,7 @@ function CategoricalTargetPanel({ targetColumn, distributions, onCardExpand }) {
   );
 }
 
-// ── Scatter Plots for top correlated pairs ────────────────────────────────────
+// scatter plots for the most correlated column pairs
 
 const renderCustomDot = (props) => {
   const { cx, cy, fill } = props;
@@ -990,7 +990,7 @@ function ScatterPairs({
 }) {
   if (!correlation || Object.keys(correlation).length === 0) return null;
 
-  // Get top 6 correlated pairs (excluding self-correlations)
+  // grab top 6 correlated pairs (skip self-correlations)
   const pairs = [];
   const cols = Object.keys(correlation);
   for (let i = 0; i < cols.length; i++) {
@@ -1330,8 +1330,8 @@ function HistogramPanel({ histograms, onCardExpand }) {
                         cursor={{ fill: "rgba(99,210,179,0.06)" }}
                       />
                       <Bar
-                        isAnimationActive={true} // Ensure this is true
-                        animationBegin={200} // Slight delay to ensure layout is ready
+                        isAnimationActive={true}
+                        animationBegin={200}
                         animationDuration={1200}
                         animationEasing="ease-in-out"
                         dataKey="count"
@@ -1384,8 +1384,8 @@ function HistogramPanel({ histograms, onCardExpand }) {
                     cursor={{ fill: "rgba(99,210,179,0.06)" }}
                   />
                   <Bar
-                    isAnimationActive={true} // Ensure this is true
-                    animationBegin={200} // Slight delay to ensure layout is ready
+                    isAnimationActive={true}
+                    animationBegin={200}
                     animationDuration={1200}
                     animationEasing="ease-in-out"
                     dataKey="count"
@@ -1535,7 +1535,7 @@ function CorrelationMatrixPanel({
                           }}
                           onClick={() => {
                             if (row === col) return;
-                            // Only select the pair for the scatter plot, do not expand
+                            // just highlight the pair, dont expand
                             onSelectPair(isSelected ? null : pairKey);
                           }}
                         >
@@ -1610,8 +1610,8 @@ function FeatureImportancePanel({ featureImportance, onCardExpand }) {
                     cursor={{ fill: "rgba(167,139,250,0.06)" }}
                   />
                   <Bar
-                    isAnimationActive={true} // Ensure this is true
-                    animationBegin={200} // Slight delay to ensure layout is ready
+                    isAnimationActive={true}
+                    animationBegin={200}
                     animationDuration={1200}
                     animationEasing="ease-in-out"
                     dataKey="value"
@@ -1668,8 +1668,8 @@ function FeatureImportancePanel({ featureImportance, onCardExpand }) {
                 cursor={{ fill: "rgba(167,139,250,0.06)" }}
               />
               <Bar
-                isAnimationActive={true} // Ensure this is true
-                animationBegin={200} // Slight delay to ensure layout is ready
+                isAnimationActive={true}
+                animationBegin={200}
                 animationDuration={1200}
                 animationEasing="ease-in-out"
                 dataKey="value"
@@ -1684,7 +1684,7 @@ function FeatureImportancePanel({ featureImportance, onCardExpand }) {
   );
 }
 
-// ── ML Readiness Panel ────────────────────────────────────────────────────────
+// panel that shows if the dataset is ready for ML
 function MLReadinessPanel({ data }) {
   const { issues, warnings, ok } = useMemo(
     () => buildMLReadiness(data),
@@ -1982,7 +1982,7 @@ const SidebarNav = ({
   );
 };
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// main EDA page component
 export default function EDA() {
   const navSections = useMemo(
     () => [
@@ -2003,7 +2003,7 @@ export default function EDA() {
     const handleScroll = () => {
       const offset = window.scrollY + window.innerHeight * 0.3;
 
-      // Get all sections and sort by offsetTop to match actual page order
+      // sort sections by position on page
       const sectionsWithOffset = navSections
         .map((section) => ({
           id: section.id,
@@ -2014,12 +2014,12 @@ export default function EDA() {
 
       let current = navSections[0]?.id;
 
-      // Find the section closest to the current scroll position
+      // find which section we're currently looking at
       for (let section of sectionsWithOffset) {
         if (section.el.offsetTop <= offset) {
           current = section.id;
         } else {
-          break; // Stop at first section below offset
+          break;
         }
       }
 
@@ -2037,11 +2037,11 @@ export default function EDA() {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  // Column search / filter state
+  // search and filter for columns
   const [colSearch, setColSearch] = useState("");
   const [colTypeFilter, setColTypeFilter] = useState("all"); // "all" | "numeric" | "categorical"
 
-  // Scatter pair selection
+  // which scatter pair is selected
   const [selectedPair, setSelectedPair] = useState(null);
   const [expandedSection, setExpandedSection] = useState(null);
   const [expandedChart, setExpandedChart] = useState(null);
@@ -2054,7 +2054,7 @@ export default function EDA() {
     }
   }, []);
 
-  //const openExpanded = (sectionId) => setExpandedSection(sectionId);
+
   const openChart = (title, content) => setExpandedChart({ title, content });
   const closeExpanded = () => {
     setExpandedSection(null);
@@ -2082,7 +2082,7 @@ export default function EDA() {
       .catch(() => {});
   }, [navSections]);
 
-  // Filtered columns
+  // filter columns based on search and type
   const filteredCols = useMemo(() => {
     if (!data) return [];
     let cols = data.columns || [];
@@ -2254,7 +2254,7 @@ export default function EDA() {
       </Layout>
     );
 
-  // Derived
+  // computed stuff from the data
   const missingEntries = Object.entries(data.missing || {});
   const maxMissing = Math.max(...missingEntries.map(([, v]) => v), 1);
   const summaryColNames = Object.keys(data.summary || {});

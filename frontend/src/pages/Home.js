@@ -6,6 +6,7 @@ import "./styles/Home.css";
 export default function Home() {
   const navigate = useNavigate();
 
+  // each card on the homepage
   const features = [
     {
       icon: "📤",
@@ -50,7 +51,7 @@ export default function Home() {
   return (
     <Layout>
       <div className="home-root">
-        {/* Hero */}
+        {/* hero section */}
         <section className="hero">
           <div className="hero-content">
             <h1 className="hero-title">
@@ -69,28 +70,28 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Features Grid */}
+        {/* feature cards */}
         <section className="features-grid">
-          {features.map((feature, idx) => (
+          {features.map((feat, idx) => (
             <div key={idx} className="feature-card">
-              <div className="feature-icon">{feature.icon}</div>
-              <h3 className="feature-title">{feature.title}</h3>
-              <p className="feature-description">{feature.description}</p>
+              <div className="feature-icon">{feat.icon}</div>
+              <h3 className="feature-title">{feat.title}</h3>
+              <p className="feature-description">{feat.description}</p>
               <button
-                className={`feature-button${feature.disabled ? " disabled" : ""}`}
-                onClick={feature.action}
-                disabled={feature.disabled}
+                className={`feature-button${feat.disabled ? " disabled" : ""}`}
+                onClick={feat.action}
+                disabled={feat.disabled}
               >
-                {feature.buttonText}
-                {feature.disabled && (
-                  <span className="disabled-reason">{feature.disabledReason}</span>
+                {feat.buttonText}
+                {feat.disabled && (
+                  <span className="disabled-reason">{feat.disabledReason}</span>
                 )}
               </button>
             </div>
           ))}
         </section>
 
-        {/* How it works */}
+        {/* how it works */}
         <section className="how-it-works">
           <h2>How It Works</h2>
           <div className="steps">
@@ -117,7 +118,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Features List */}
+        {/* capabilities list */}
         <section className="capabilities">
           <h2>Capabilities</h2>
           <ul className="capabilities-list">
@@ -132,7 +133,7 @@ export default function Home() {
           </ul>
         </section>
 
-        {/* CTA */}
+        {/* bottom cta */}
         <section className="final-cta">
           <h2>Ready to Build Your Model?</h2>
           <p>No machine learning experience required. Start with one click.</p>

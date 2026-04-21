@@ -3,98 +3,62 @@ import Layout from "../components/Layout";
 import API from "../api";
 import './styles/Results.css'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
+// grab the primary cv score from a model's results
 const getScore = (v) => v?.cv_mean ?? v?.cv_mean_r2;
 
-/** Return an ordered list of { key, label, value, color } for a model's scores */
+// builds an array of score badges for a model
 function buildScorePills(data) {
   const pills = [];
 
   if (data.cv_mean !== undefined)
-    pills.push({
-      key: "cv_mean",
-      label: "CV F1",
-      value: data.cv_mean,
-      color: "accent",
-    });
+    pills.push({ key: "cv_mean", label: "CV F1", value: data.cv_mean, color: "accent" });
   if (data.cv_mean_r2 !== undefined)
-    pills.push({
-      key: "cv_mean_r2",
-      label: "CV R²",
-      value: data.cv_mean_r2,
-      color: "accent",
-    });
+    pills.push({ key: "cv_mean_r2", label: "CV R²", value: data.cv_mean_r2, color: "accent" });
   if (data.cv_std !== undefined)
-    pills.push({
-      key: "cv_std",
-      label: "CV ±std",
-      value: data.cv_std,
-      color: "muted",
-    });
+    pills.push({ key: "cv_std", label: "CV ±std", value: data.cv_std, color: "muted" });
   if (data.test_accuracy !== undefined)
-    pills.push({
-      key: "test_accuracy",
-      label: "Test Acc",
-      value: data.test_accuracy,
-      color: "blue",
-    });
+    pills.push({ key: "test_accuracy", label: "Test Acc", value: data.test_accuracy, color: "blue" });
   if (data.test_f1_weighted !== undefined)
-    pills.push({
-      key: "test_f1",
-      label: "Test F1",
-      value: data.test_f1_weighted,
-      color: "purple",
-    });
+    pills.push({ key: "test_f1", label: "Test F1", value: data.test_f1_weighted, color: "purple" });
   if (data.test_r2 !== undefined)
-    pills.push({
-      key: "test_r2",
-      label: "Test R²",
-      value: data.test_r2,
-      color: "blue",
-    });
+    pills.push({ key: "test_r2", label: "Test R²", value: data.test_r2, color: "blue" });
   if (data.test_mae !== undefined)
-    pills.push({
-      key: "test_mae",
-      label: "Test MAE",
-      value: data.test_mae,
-      color: "orange",
-    });
+    pills.push({ key: "test_mae", label: "Test MAE", value: data.test_mae, color: "orange" });
 
   return pills;
 }
 
-/** Best primary score key for the hero display */
+// figure out which score to show big in the hero card
 function bestScoreKey(data) {
   if (data.cv_mean_r2 !== undefined) return "cv_mean_r2";
   if (data.cv_mean !== undefined) return "cv_mean";
   return null;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export default function Results() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const storedResults = localStorage.getItem("automl_results");
+  // try getting results from navigation state first, fallback to localStorage
+  const stored = localStorage.getItem("automl_results");
   const results =
-    location.state?.results || (storedResults ? JSON.parse(storedResults) : {});
+    location.state?.results || (stored ? JSON.parse(stored) : {});
 
+  // filter out models that errored / have no score
   const validResults = Object.entries(results).filter(
     ([_, v]) => v && getScore(v) !== undefined,
   );
 
   const sorted = validResults.sort((a, b) => getScore(b[1]) - getScore(a[1]));
   const best = sorted[0];
-  const maxScore = best ? getScore(best[1]) : 1;
-  const relWidth = (score) => Math.max(0, Math.min(1, score / maxScore));
+  const topScore = best ? getScore(best[1]) : 1;
+  const barWidth = (score) => Math.max(0, Math.min(1, score / topScore));
 
   return (
     <Layout>
       <div className="results-root">
         <div className="results-wrap">
-          {/* ── Page header ── */}
+          {/* page header */}
           <div className="page-header">
             <div className="page-eyebrow">AutoML · Model Evaluation</div>
             <h1 className="page-title">
@@ -103,6 +67,7 @@ export default function Results() {
           </div>
 
           {sorted.length === 0 ? (
+            // no results yet - show empty state
             <div className="state-card">
               <div className="state-icon">
                 <svg
@@ -130,7 +95,7 @@ export default function Results() {
             </div>
           ) : (
             <>
-              {/* ══ BEST MODEL HERO ══ */}
+              {/* best model hero card */}
               <div className="hero-card">
                 <div className="hero-bar" />
                 <div className="hero-body">
@@ -152,7 +117,7 @@ export default function Results() {
                       <div className="hero-tag">🏆 Best Model</div>
                       <div className="hero-name">{best[0]}</div>
 
-                      {/* All score chips for best model */}
+                      {/* score chips */}
                       <div className="hero-scores-grid">
                         {buildScorePills(best[1]).map((pill) => {
                           const isBest = pill.key === bestScoreKey(best[1]);
@@ -176,7 +141,7 @@ export default function Results() {
                 </div>
               </div>
 
-              {/* ══ ALL MODELS ══ */}
+              {/* all models list */}
               <div className="section-label">All Models</div>
 
               <div className="model-list">
@@ -192,7 +157,7 @@ export default function Results() {
                       className={`model-card${rankCls}`}
                       style={{ animationDelay: delay }}
                     >
-                      {/* Top row: rank + name + bar + primary score */}
+                      {/* rank + name + score bar */}
                       <div className="model-card-top">
                         <span className="rank-num">#{i + 1}</span>
 
@@ -205,7 +170,7 @@ export default function Results() {
                             <div
                               className="score-bar-fill"
                               style={{
-                                width: `${relWidth(score) * 100}%`,
+                                width: `${barWidth(score) * 100}%`,
                                 animationDelay: delay,
                               }}
                             />
@@ -216,7 +181,7 @@ export default function Results() {
                         </div>
                       </div>
 
-                      {/* Bottom row: all score pills */}
+                      {/* all the score pills */}
                       <div className="model-scores-grid">
                         {pills.map((pill) => (
                           <div className="score-pill" key={pill.key}>
@@ -233,13 +198,13 @@ export default function Results() {
                 })}
               </div>
 
-              {/* ══ CTAs ══ */}
+              {/* action buttons */}
               <div className="cta-row">
                 <button
                   className="btn-primary"
                   onClick={() => {
-                    const stored = localStorage.getItem("automl_results");
-                    navigate(stored ? "/eda" : "/");
+                    const s = localStorage.getItem("automl_results");
+                    navigate(s ? "/eda" : "/");
                   }}
                 >
                   <svg
