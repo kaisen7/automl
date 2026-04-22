@@ -1,18 +1,22 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap");
 
 :root {
-  --bg: #0a0b0f;
-  --surface: #111318;
-  --surface-2: #181c24;
-  --border: rgba(255, 255, 255, 0.07);
-  --border-active: rgba(99, 210, 179, 0.4);
-  --accent: #63d2b3;
-  --accent-dim: rgba(99, 210, 179, 0.1);
-  --text: #e8eaf0;
-  --text-muted: #6b7280;
-  --text-dim: #9ca3af;
+  --bg: #030304;
+  --surface: rgba(16, 17, 22, 0.6);
+  --surface-2: rgba(22, 23, 30, 0.8);
+  --surface-3: rgba(30, 32, 40, 0.9);
+  --border: rgba(255, 255, 255, 0.05);
+  --border-active: rgba(139, 92, 246, 0.3);
+  --accent: #8b5cf6;
+  --accent-2: #06b6d4;
+  --accent-dim: rgba(139, 92, 246, 0.1);
+  --accent-2-dim: rgba(6, 182, 212, 0.1);
+  --text: #f9fafb;
+  --text-muted: #94a3b8;
+  --text-dim: #cbd5e1;
   --mono: "DM Mono", monospace;
   --sans: "Syne", sans-serif;
+  --glass: blur(12px) saturate(180%);
 }
 
 *,
@@ -35,15 +39,15 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(10, 11, 15, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(3, 3, 4, 0.7);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 32px;
-  height: 56px;
+  padding: 0 40px;
+  height: 64px;
   gap: 24px;
 }
 
@@ -55,8 +59,8 @@ body {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, var(--accent), transparent 60%);
-  opacity: 0.5;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), transparent 80%);
+  opacity: 0.4;
 }
 
 /* ── Nav left (wordmark + hamburger) ── */
@@ -80,20 +84,23 @@ body {
 }
 
 .nav-logo-box {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   background: var(--accent-dim);
   border: 1px solid var(--border-active);
-  border-radius: 2px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--accent);
-  transition: background 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.1);
 }
 
 .nav-wordmark:hover .nav-logo-box {
-  background: rgba(99, 210, 179, 0.18);
+  background: rgba(139, 92, 246, 0.18);
+  transform: scale(1.05) rotate(5deg);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.25);
 }
 
 .nav-wordmark-text {
@@ -120,29 +127,28 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 14px;
-  border-radius: 2px;
+  padding: 8px 16px;
+  border-radius: 8px;
   cursor: pointer;
   font-family: var(--mono);
-  font-size: 15px;
-  letter-spacing: 0.06em;
+  font-size: 14px;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
-  transition:
-    color 0.18s,
-    background 0.18s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
   border: 1px solid transparent;
 }
 
 .nav-link:hover {
-  color: var(--text-dim);
-  background: var(--surface-2);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .nav-link.active {
   color: var(--accent);
   background: var(--accent-dim);
-  border-color: rgba(99, 210, 179, 0.18);
+  border-color: rgba(139, 92, 246, 0.15);
+  box-shadow: inset 0 0 10px rgba(139, 92, 246, 0.05);
 }
 
 .nav-link-dot {
@@ -172,23 +178,22 @@ body {
   opacity: 0.7;
 }
 
-/* ── Mobile hamburger ── */
 .nav-hamburger {
   display: none;
   flex-direction: column;
   gap: 4px;
   cursor: pointer;
-  padding: 6px;
+  padding: 8px;
   background: none;
-  border: 1px solid rgba(99, 210, 179, 0.3);
-  border-radius: 6px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 8px;
   flex-shrink: 0;
   transition: all 0.2s ease;
 }
 
 .nav-hamburger:hover {
-  background: rgba(99, 210, 179, 0.1);
-  border-color: rgba(99, 210, 179, 0.5);
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.4);
 }
 
 .nav-hamburger span {
@@ -212,21 +217,20 @@ body {
   background: var(--accent);
 }
 
-/* ── Mobile drawer ── */
 .nav-drawer {
   display: none;
   position: fixed;
-  top: 56px;
+  top: 64px;
   left: 0;
   right: 0;
-  background: rgba(10, 11, 15, 0.97);
-  backdrop-filter: blur(16px);
+  background: rgba(3, 3, 4, 0.8);
+  backdrop-filter: var(--glass);
   border-bottom: 1px solid var(--border);
-  padding: 16px 24px 24px;
+  padding: 20px 24px 32px;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   z-index: 99;
-  animation: drawerIn 0.2s ease both;
+  animation: drawerIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .nav-drawer.open {
@@ -269,7 +273,7 @@ body {
 .drawer-link.active {
   color: var(--accent);
   background: var(--accent-dim);
-  border-color: rgba(99, 210, 179, 0.18);
+  border-color: rgba(139, 92, 246, 0.15);
 }
 
 .drawer-step {

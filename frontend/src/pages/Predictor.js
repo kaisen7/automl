@@ -59,7 +59,7 @@ export default function Predictor() {
         <div className="pred-root">
           <div className="pred-wrap">
             <div className="guard-card">
-              <div className="guard-icon" style={{ color: "#f87171" }}>
+              <div className="guard-icon" style={{ color: "var(--red)" }}>
                 <svg
                   width="20"
                   height="20"
@@ -73,7 +73,7 @@ export default function Predictor() {
                   <line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
               </div>
-              <div className="guard-title" style={{ color: "#f87171" }}>
+              <div className="guard-title" style={{ color: "var(--red)" }}>
                 No session data found
               </div>
               <div className="guard-sub">
@@ -256,8 +256,8 @@ export default function Predictor() {
                   style={{
                     marginTop: 12,
                     background: "transparent",
-                    color: "#63d2b3",
-                    border: "1px solid rgba(99,210,179,0.3)",
+                    color: "var(--accent-2)",
+                    border: "1px solid rgba(6,182,212,0.3)",
                   }}
                   href={downloadUrl}
                   download={downloadName}

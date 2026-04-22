@@ -180,11 +180,11 @@ export default function EDAPage() {
           <div className="eda-inner">
             <div className="state-card">
               <div className="state-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="1.5">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="1.5">
                   <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
               </div>
-              <div className="state-title" style={{ color: "#f87171" }}>{error}</div>
+              <div className="state-title" style={{ color: "var(--red)" }}>{error}</div>
               <div className="state-sub">Check that a dataset has been uploaded and trained.</div>
               <button className="ghost-btn" style={{ marginTop: 8 }} onClick={() => navigate("/")}>Go to Upload</button>
             </div>

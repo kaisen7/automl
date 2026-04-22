@@ -9,7 +9,7 @@
         width="110" height="110" 
         rx="12" 
         fill="none" 
-        stroke="rgba(99, 210, 179, 0.4)" 
+        stroke="#8B5CF6" 
         stroke-width="4"
     />
 
@@ -17,7 +17,7 @@
     <g 
         transform="translate(20,20) scale(3)"
         fill="none" 
-        stroke="#63d2b3" 
+        stroke="#8B5CF6" 
         stroke-width="2.5" 
         stroke-linecap="round" 
         stroke-linejoin="round">
@@ -26,3 +26,4 @@
     </g>
 
 </svg>
+
