@@ -1,19 +1,21 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap');
 
 :root {
-  --bg: #0a0b0f;
-  --surface: #111318;
-  --surface-2: #181c24;
-  --surface-3: #1e2330;
-  --border: rgba(255, 255, 255, 0.07);
-  --border-active: rgba(99, 210, 179, 0.4);
-  --accent: #63d2b3;
-  --accent-dim: rgba(99, 210, 179, 0.10);
-  --text: #e8eaf0;
-  --text-muted: #6b7280;
-  --text-dim: #9ca3af;
+  --bg: #030304;
+  --surface: rgba(16, 17, 22, 0.6);
+  --surface-2: rgba(22, 23, 30, 0.8);
+  --surface-3: rgba(30, 32, 40, 0.9);
+  --border: rgba(255, 255, 255, 0.05);
+  --border-active: rgba(139, 92, 246, 0.3);
+  --accent: #8b5cf6;
+  --accent-2: #06b6d4;
+  --accent-dim: rgba(139, 92, 246, 0.1);
+  --text: #f9fafb;
+  --text-muted: #94a3b8;
+  --text-dim: #cbd5e1;
   --mono: 'DM Mono', monospace;
   --sans: 'Syne', sans-serif;
+  --glass: blur(12px) saturate(180%);
 }
 
 * {
@@ -36,8 +38,8 @@
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgba(99, 210, 179, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 210, 179, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(139, 92, 246, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.05) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
   z-index: 0;
@@ -85,11 +87,13 @@
   display: flex;
   gap: 0;
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: 12px;
   overflow: hidden;
   background: var(--surface);
+  backdrop-filter: var(--glass);
   margin-bottom: 45px;
   margin-top: 15px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
 .stat-cell {
@@ -280,9 +284,11 @@
 
 .panel {
   background: var(--surface);
+  backdrop-filter: var(--glass);
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: 16px;
   overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .panel-bar {
@@ -453,7 +459,7 @@
 }
 
 .outlier-count.zero {
-  color: var(--accent);
+  color: var(--accent-2);
 }
 
 .outlier-count.has {
@@ -523,9 +529,10 @@
   top: 50%;
   width: 2px;
   height: 18px;
-  background: #f87171;
+  background: var(--accent-2);
   transform: translate(-50%, -50%);
   border-radius: 1px;
+  box-shadow: 0 0 8px var(--accent-2);
 }
 
 .boxplot-meta {
@@ -1392,7 +1399,39 @@
   }
 }
 
-/* Hamburger lines */
+/* ── Badges ── */
+.badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+}
+
+.badge-green {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(139, 92, 246, 0.2);
+}
+
+.badge-red {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--red);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.badge-gold {
+  background: var(--gold-dim);
+  color: var(--gold);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+/* ── Responsive ── */
 .hamburger-btn span {
   display: block;
   height: 2px;
