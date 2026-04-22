@@ -9,7 +9,7 @@ function BoxPlotPanel({ boxPlots, onCardExpand }) {
       id="box-plots"
       style={{ animationDelay: "0.15s" }}
     >
-      <div className="section-label">Box Plots · Outlier Summary</div>
+      <div className="section-label">Box Plots | Outlier Summary</div>
       <div className="boxplot-grid">
         {cols.map(([col, stats]) => {
           const range = stats.max - stats.min || 1;
@@ -25,7 +25,7 @@ function BoxPlotPanel({ boxPlots, onCardExpand }) {
               key={col}
               onClick={() =>
                 onCardExpand?.(
-                  `Box Plot • ${col}`,
+                  `Box Plot | ${col}`,
                   <div
                     style={{
                       width: "100%",

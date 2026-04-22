@@ -213,7 +213,7 @@ export default function EDAPage() {
           {/* -- Header -- */}
           <div className="page-header">
             <div>
-              <div className="page-eyebrow">AutoML · Exploratory Data Analysis</div>
+              <div className="page-eyebrow">AutoML | Exploratory Data Analysis</div>
               <h1 className="page-title">
                 EDA <span>Dashboard</span>
                 {data.has_model && <span className="badge badge-green">● model ready</span>}

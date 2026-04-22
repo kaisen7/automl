@@ -37,7 +37,7 @@ function TargetSection({
             className="chart-card clickable"
             onClick={() =>
               onCardExpand?.(
-                `Target Distribution • ${targetColumn}`,
+                `Target Distribution | ${targetColumn}`,
                 <div style={{ width: "100%", minHeight: 420 }}>
                   <ResponsiveContainer width="100%" height={360}>
                     <PieChart>
