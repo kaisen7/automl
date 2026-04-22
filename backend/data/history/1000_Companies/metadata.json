@@ -1,6 +1,6 @@
 {
   "dataset_name": "1000_Companies",
-  "timestamp": "2026-04-22T06:25:52.668845+00:00",
+  "timestamp": "2026-04-22T07:25:46.239386+00:00",
   "scores": {
     "LinearRegression": {
       "cv_mean_r2": 0.9368,

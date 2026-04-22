@@ -23,7 +23,7 @@ function DistributionSection({ histograms, categorical, numericCols, onCardExpan
                   key={col}
                   onClick={() =>
                     onCardExpand?.(
-                      `Histogram • ${col}`,
+                      `Histogram | ${col}`,
                       <div style={{ width: "100%", minHeight: 420 }}>
                         <ResponsiveContainer width="100%" height={360}>
                           <BarChart
@@ -147,7 +147,7 @@ function DistributionSection({ histograms, categorical, numericCols, onCardExpan
                   key={col}
                   onClick={() =>
                     onCardExpand?.(
-                      `Category Distribution • ${col}`,
+                      `Category Distribution | ${col}`,
                       <div style={{ width: "100%", minHeight: 420 }}>
                         <ResponsiveContainer width="100%" height={360}>
                           <PieChart>

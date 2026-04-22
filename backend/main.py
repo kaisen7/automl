@@ -427,7 +427,7 @@ def _compute_eda_payload() -> dict:
     for col in num_cols:
         counts, bins = np.histogram(display_df[col].dropna(), bins=6)
         histograms[col] = [
-            {"bin": f"{round(bins[i], 2)} - {round(bins[i+1], 2)}", "count": int(counts[i])}
+            {"bin": f"{round(bins[i], 2)}-{round(bins[i+1], 2)}", "count": int(counts[i])}
             for i in range(len(counts))
         ]
 
